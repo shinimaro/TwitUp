@@ -1,0 +1,7 @@
+.env
+README.txt
+test.py
+
+.mypy_cache/
+.vscode/
+__pycache__/
