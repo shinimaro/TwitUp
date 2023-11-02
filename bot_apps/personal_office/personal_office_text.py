@@ -1,6 +1,4 @@
-import asyncio
-
-from bot_apps.databases.database import db
+from databases.database import db
 from bot_apps.wordbank.wordlist import accounts
 from bot_apps.wordbank.wordlist import personal_account
 

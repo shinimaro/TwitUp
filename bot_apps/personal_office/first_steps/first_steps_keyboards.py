@@ -1,7 +1,6 @@
 from aiogram.types import InlineKeyboardButton as IB
 from aiogram.utils.keyboard import InlineKeyboardBuilder as BD
 
-from bot_apps.databases.database import db
 from bot_apps.wordbank.wordlist import accounts, BACK, BACK_PERSONAL_ACCOUNT, personal_account, main_menu, \
     BACK_MAIN_MENU
 

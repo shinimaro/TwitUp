@@ -1,15 +1,14 @@
-import time
 from datetime import datetime
 from aiogram.filters import BaseFilter
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message
 
-from bot_apps.databases.database import db
+from databases.database import db
 
 
 # Функция, которая находит старое сообщение с основным интерфейсом бота и удаляет его, записывая новое
-async def delete_old_interface(message: Message, tg_id: str, bot: Bot, dop_message_id=None):
+async def delete_old_interface(message: Message, tg_id: int, bot: Bot, dop_message_id=None):
     main_interface = await db.get_main_interface(tg_id)
     # Если старое сообщение обнаружено
     if main_interface:

@@ -1,9 +1,8 @@
-from aiogram.filters import callback_data
 from aiogram.types import InlineKeyboardButton as IB
 from aiogram.utils.keyboard import InlineKeyboardBuilder as BD
 
-from bot_apps.databases.database import db
-from bot_apps.wordbank.wordlist import BACK_MAIN_MENU, BACK, FORWARD
+from databases.database import db
+from bot_apps.wordbank.wordlist import BACK_MAIN_MENU, BACK, FORWARD, notifications
 from bot_apps.wordbank.wordlist import task_completion
 from config import load_config
 
@@ -100,6 +99,17 @@ async def complete_task_builder(tg_id, tasks_msg_id):
     return complete_task.as_markup()
 
 
+# Клавиатура в случае, если парсер ебанулся и ничего не спарсил
+async def not_parsing_builder(tasks_msg_id):
+    not_parsing = BD()
+    not_parsing.row(
+        IB(text=task_completion['buttons']['again_check_button'],
+           callback_data=f'check_complete_task_{tasks_msg_id}'),
+        IB(text=task_completion['connect_to_agent_button'],
+           url=f"tg://resolve?domain={config.tg_bot.support_name}"), width=1)
+
+
+
 # Клавиатура под вводом ссылки на комментарий
 async def get_link_comment_builder(tg_id, tasks_msg_id):
     get_link_comment = BD()
@@ -168,8 +178,6 @@ async def task_again_builder(tg_id, tasks_msg_id):
 # Клавиатура под информацией о задании, когда воркер решил выполнить задние снова с другого аккаунта
 async def new_account_from_task_keyboard_builder(tasks_msg_id, account):
     new_account_from_task = BD()
-    # И добавь, чтобы выполнение, либо каждый раз уменьшалось (не, не надо), либо же в запросе просто вычиталась из сделанных и в конце уже обновлялось до конца
-    # Разберись с выполнением на всех аккаунтах
     if not account:
         new_account_from_task.row(
             IB(text=task_completion['buttons']['select_account_button'],
@@ -193,3 +201,14 @@ async def not_again_task_builder():
         IB(text=BACK_MAIN_MENU,
            callback_data='back_to_main_menu'), width=1)
     return not_again_task.as_markup()
+
+
+# Клавиатура под уведомлением о том, что пользователь много выполнил заданий и теперь круто было бы конечно отзыв оставить вот мда
+async def proposal_for_review_builder():
+    proposal_for_review = BD()
+    proposal_for_review.row(
+        IB(text=notifications['buttons']['leave_review_button'],
+           url=config.tg_bot.feedback_group),
+        IB(text=notifications['buttons']['no_leave_review_button'],
+           callback_data='close'), width=1)
+    return proposal_for_review.as_markup()

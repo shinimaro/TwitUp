@@ -1,8 +1,8 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder as BD
 from aiogram.types import InlineKeyboardButton as IB
 
-from bot_apps.databases.database import db
-from bot_apps.wordbank import wordlist
+from databases.database import db
+from bot_apps.wordbank import wordlist, BACK_MAIN_MENU
 from config import load_config
 
 config = load_config()
@@ -29,3 +29,12 @@ async def main_menu_builder(tg_id):
            callback_data='other'))
 
     return main_menu.as_markup()
+
+
+# Секретный кейборад для одного сообщения
+async def welcome_keyboard():
+    welcome_kb = BD()
+    welcome_kb.row(
+        IB(text=BACK_MAIN_MENU,
+           callback_data='back_to_main_menu'))
+    return welcome_kb.as_markup()

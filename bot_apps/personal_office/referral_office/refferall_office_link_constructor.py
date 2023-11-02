@@ -1,5 +1,4 @@
-from bot_apps.databases.database import db
-from bot_apps.databases.database import Database
+from databases.database import db
 from urllib.parse import quote
 
 

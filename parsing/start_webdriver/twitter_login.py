@@ -1,31 +1,45 @@
-from asyncio import sleep
+import asyncio
+import os
+import pickle
 
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.keys import Keys
+import aiofiles
+
+from config import load_config
+from parsing.main.elements_dictionary import login_blocks, converter, base_links
+
+config = load_config()
 
 
-async def login_in_twitter(driver, login: str, password: str) -> None:
+# Функция для сохранения куки
+async def save_cookies(cookies, login):
+    async with aiofiles.open(f'../cookies/{login}_cookies.pkl', 'wb') as file:
+        await file.write(pickle.dumps(cookies))
 
-    for i in range(3):
+
+async def twitter_login(page, login, password):
+    timeout = 5000
+    for _ in range(3):
         try:
-            driver.get('https://www.twitter.com/login')
-            await sleep(3 + i)
-
-            username = driver.find_element_by_xpath('//input[@name="text"]')
-            username.send_keys(login)
-            await sleep(1)
-            username.send_keys(Keys.RETURN)
-            await sleep(2)
-
-            password_in_twitter = driver.find_element_by_xpath('//input[@name="password"]')
-            password_in_twitter.send_keys(password)
-            await sleep(1)
-            password_in_twitter.send_keys(Keys.RETURN)
-            await sleep(3)
+            await page.goto(base_links['login_page'])
+            # Ввод логина
+            await page.waitForSelector(login_blocks['username_input'], timeout=timeout)
+            await page.type(login_blocks['username_input'], login)
+            # Нажатие на кнопку "далее"
+            await page.waitForSelector(converter(login_blocks['next_button']), timeout=timeout)
+            await page.click(converter(login_blocks['next_button']))
+            # Ввод пароля
+            await page.waitForSelector(login_blocks['password_input'], timeout=timeout)
+            await page.type(login_blocks['password_input'], password)
+            # Нажатие на кнопку авторизации
+            await page.waitForSelector(login_blocks['login_button'], timeout=timeout)
+            await page.click(login_blocks['login_button'])
+            # Ожидаем минимальной прогрузки элементов главной страницы
+            await page.waitForNavigation()
+            # Сохраняем все куки в соответствующем фалйе, даже если он уже существует
+            cookies = await page.cookies()
+            await save_cookies(cookies, login)
             break
-        except NoSuchElementException:
-            await sleep(1 + i)
-            continue
+        except TimeoutError:
+            timeout += 5000
     else:
-        print('Ошибка авторизации')
-        exit()
+        print(f'Ошибка авторизации аккаунта {login}')

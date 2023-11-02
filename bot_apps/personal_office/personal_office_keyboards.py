@@ -1,11 +1,10 @@
-import re
 from math import ceil
 from re import search
 
 from aiogram.types import InlineKeyboardButton as IB
 from aiogram.utils.keyboard import InlineKeyboardBuilder as BD
 
-from bot_apps.databases.database import db
+from databases.database import db
 from bot_apps.wordbank.wordlist import BACK_PERSONAL_ACCOUNT, payment, history_task
 from bot_apps.wordbank.wordlist import accounts, BACK, FORWARD
 from bot_apps.wordbank.wordlist import personal_account, BACK_MAIN_MENU

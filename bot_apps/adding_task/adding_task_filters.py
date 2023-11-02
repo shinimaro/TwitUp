@@ -93,7 +93,7 @@ async def is_correct_note(note: str) -> dict[str | str] | str:
     # Проверка слов на символы
     for no in note_list:
         for n in no:
-            if n.lower() not in string.digits + string.ascii_letters + '''абвгдеёжзийклмнопрстуфхцчшщъыьэюя' + '_,./!@#$%&()"№;%'"%''':
+            if n.lower() not in string.digits + string.ascii_letters + 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя' + '!@></.`-~,\#''$%^&*()_+?:%;№"![]{|*}':
                 return add_task['not_correct_note'].format(note)
 
         # Если слово слишком длинное
@@ -134,7 +134,7 @@ async def is_correct_words_or_tags(elements: str, only_english=False) -> dict[st
             # Проходимся по всем элементам строки и убираем пробелы
             for e in el.replace(' ', ''):
                 # Если строка содержит неправильные символы
-                if e.lower() not in string.digits + string.ascii_letters + 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя' + '''!'@></.`~,\#$%^&*()_+?:%;№"![]{|*}''':
+                if e.lower() not in string.digits + string.ascii_letters + 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя' + '!@></.`-~,\#$%^''&*()_+?:%;№"![]{|*}':
                     return add_task['not_correct_word'].format(el, elements[:150])
         # Так же проходимся только по тэгу
         else:

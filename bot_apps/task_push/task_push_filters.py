@@ -1,8 +1,7 @@
-import asyncio
 import string
 
-from aiogram import Router, Bot
-from bot_apps.databases.database import db
+from aiogram import Router
+from databases.database import db
 from bot_apps.task_push.task_push_text import context_task_builder, content_comment_builder
 from bot_apps.wordbank import task_completion
 from config import load_config
@@ -12,7 +11,7 @@ config = load_config()
 
 
 # Функция для подготовки ссылки комментарии для проверки на корректность
-async def comment_check_filter(tg_id: str, link: str) -> dict[str, str] | int:
+async def comment_check_filter(tg_id: int, link: str) -> dict[str, str] | int:
     result = await db.get_task_for_link(tg_id, re.search('https://twitter\.com/([\w\d_]{3,})/status/\d{1,19}', link).group(1))
     # Если нет задания, которое ждёт ввода ссылки
     if isinstance(result, bool):
@@ -26,15 +25,16 @@ async def comment_check_filter(tg_id: str, link: str) -> dict[str, str] | int:
 
 
 # Функция для самой проверки комментария
-async def comment_check_itself(tasks_msg_id, link):
-    # comment_text = await func(link)
-    comment_text = 'asd asd qwqe QEQWE adfdfq QWE'
+async def comment_check_itself(tasks_msg_id: int, comment_text: str) -> bool:
     account_name = await db.get_task_account(tasks_msg_id)
     link_account = task_completion['dop_not_check_comment'] + f'<a href="https://twitter.com/{account_name[1:]}/with_replies"><b>Ссылка на твои комментарии</b></a>'
 
-    # Если комментария нет в ссылке, которую он скинул
-    if not comment_text:
+    # Если комментария нет в ссылке, которую он скинул, ну либо там вообще нет текста, а только одни смайлики
+    if comment_text is None:
         return task_completion['not_correct_link_2'] + link_account + await content_comment_builder(tasks_msg_id)
+    # Если в процессе парсинга, парсер обнаружил, что коммент оставлен не тем юзером, либо не под тем постом, либо не нашёл html тэг, говорящий о том, что это комментарий
+    if comment_text is False:
+        return task_completion['not_correct_comment'] + link_account + + await content_comment_builder(tasks_msg_id)
 
     task_info = await db.open_task(tasks_msg_id)
     task_info = task_info.get('comment_parameter', None)

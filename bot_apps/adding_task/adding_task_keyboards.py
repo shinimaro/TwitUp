@@ -149,12 +149,11 @@ async def select_minimum_parameters_builder(type_setting='words'):
     select_minimum_parameters = BD()
     # Если ничего не указано, то выбираем выбор количества слов ("words"). Если указано "tags", то выбираем количество тэгов
     select_minimum_parameters.row(
-        *[IB(text=i,
+        *[IB(text=str(i),
              callback_data=f'minimum_{"words" if type_setting == "words" else "tags"}_{i}') for i in range(1, 6)], width=1)
     select_minimum_parameters.row(
         IB(text=BACK,
-           callback_data='back_to_checking_comment')
-    )
+           callback_data='back_to_checking_comment'))
     return select_minimum_parameters.as_markup()
 
 
@@ -219,7 +218,7 @@ async def not_money_keyboard_builder(balance_flag=False):
 async def add_number_user_builder(balance, data):
     add_number_user = BD()
     prices = await define_price(data)
-    result = balance // prices
+    result = int(balance // prices)
     # Если у юзера хватает баланса на 6 выполнений, то ставим кнопку его макса
     if result >= 6:
         add_number_user.row(

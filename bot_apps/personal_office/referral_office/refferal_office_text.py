@@ -1,5 +1,4 @@
-from bot_apps.databases.database import db
-from bot_apps.databases.database import Database
+from databases.database import db
 from bot_apps.personal_office.referral_office.refferall_office_link_constructor import ref_link_no_text
 
 from bot_apps.wordbank.wordlist import referral_office

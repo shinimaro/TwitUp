@@ -1,11 +1,10 @@
-from aiogram import Router, Bot
-from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Text, StateFilter
+from aiogram import Router, Bot, F
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
 from bot_apps.FSM.FSM_states import FSMAccounts, FSMPromocode
-from bot_apps.limit_filter.limit_filter import MainFiter
+from bot_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.personal_office.referral_office.referral_office_keyboards import create_promocode_kb_builder, \
     button_back_under_insert_promocode_builder, correct_to_inserted_promocode_builder, \
     successful_creation_promocode_builder, ref_office_builder, affiliate_statistics_builder, block_keyboard_builder, \
@@ -16,27 +15,29 @@ from bot_apps.personal_office.referral_office.refferall_office_link_constructor 
 from bot_apps.personal_office.referral_office.refferral_office_filters import correct_promocode
 from bot_apps.wordbank.wordlist import referral_office
 from config import load_config
-from bot_apps.databases.database import db
+from databases.database import db
 
 config = load_config()
 router = Router()
 bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
+router.callback_query.filter(IsBanned())
+router.message.filter(IsBanned())
 
 
 # Начало создания промокода
-@router.callback_query(Text(text=['not_promocode', 'back_to_create_promocode']))
+@router.callback_query(F.data.in_('not_promocode' 'back_to_create_promocode'))
 async def process_add_promocode(callback: CallbackQuery, state: FSMContext):
-    # if not await db.check_pass_ref_office(callback.from_user.id):
-    #     await callback.message.edit_text(referral_office['preliminary_text'],
-    #                                      reply_markup=await block_keyboard_builder())
-    # else:
-    await callback.message.edit_text(referral_office['creation_promocode']['firs_text'],
-                                     reply_markup=await create_promocode_kb_builder())
-    await state.set_state(FSMAccounts.accounts_menu)
+    if not await db.check_pass_ref_office(callback.from_user.id):
+        await callback.message.edit_text(referral_office['preliminary_text'],
+                                         reply_markup=await block_keyboard_builder())
+    else:
+        await callback.message.edit_text(referral_office['creation_promocode']['firs_text'],
+                                         reply_markup=await create_promocode_kb_builder())
+        await state.set_state(FSMAccounts.accounts_menu)
 
 
 # Пользователь собирается вводить промокод
-@router.callback_query(Text(text=['create_promocode', 'change_promocode']))
+@router.callback_query(F.data.in_('create_promocode' 'change_promocode'))
 async def process_create_promocode(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(referral_office['creation_promocode']['what_the_name'],
                                      reply_markup=await button_back_under_insert_promocode_builder())
@@ -50,13 +51,9 @@ async def process_insert_promocode(message: Message, state: FSMContext):
     is_correct_promomode = await correct_promocode(message.text.strip() if message.text else None)
     # Если функция вернула текст с ошибкой
     if isinstance(is_correct_promomode, str):
-        # Защита от ошибки изменения сообщения на тот же самый текст
-        try:
-            await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
-                                        chat_id=message.chat.id, text=is_correct_promomode,
-                                        reply_markup=await button_back_under_insert_promocode_builder())
-        except TelegramBadRequest:
-            pass
+        await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
+                                    chat_id=message.chat.id, text=is_correct_promomode,
+                                    reply_markup=await button_back_under_insert_promocode_builder())
     # Если пользователь ввёл корректный промокод
     else:
         await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
@@ -67,7 +64,7 @@ async def process_insert_promocode(message: Message, state: FSMContext):
 
 
 # Пользователь сохранил промокод
-@router.callback_query(Text(text=['save_promocode']))
+@router.callback_query(F.data == 'save_promocode')
 async def process_save_new_promocode(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await db.save_new_promocode(callback.from_user.id, data.get('promocode'))
@@ -78,7 +75,7 @@ async def process_save_new_promocode(callback: CallbackQuery, state: FSMContext)
 
 
 # Пользователь открыл реферальный кабинет
-@router.callback_query(Text(text=['ref_office', 'back_to_ref_office']))
+@router.callback_query(F.data.in_('ref_office' 'back_to_ref_office'))
 async def process_open_ref_office(callback: CallbackQuery, state: FSMContext):
     promocode = await db.get_promocode(callback.from_user.id)
     # Если у пользователя нет промокода, запускается процесс, в котором мы предлагаем ему создать его
@@ -91,14 +88,14 @@ async def process_open_ref_office(callback: CallbackQuery, state: FSMContext):
 
 
 # Открываем нформацию с партнёрской статистикой
-@router.callback_query(Text(text=['affiliate_statistics']))
+@router.callback_query(F.data == 'affiliate_statistics')
 async def process_open_affiliate_statistics(callback: CallbackQuery):
     await callback.message.edit_text(await affiliate_statistics_text_builder(callback.from_user.id),
                                      reply_markup=await affiliate_statistics_builder())
 
 
 # Пользователь решил собрать все реферальные награды
-@router.callback_query(Text(text=['collect_referral_rewards']))
+@router.callback_query(F.data == 'collect_referral_rewards')
 async def collection_referral_rewards(callback: CallbackQuery, state: FSMContext):
     # У пользователя нет реферальных наград
     if not await db.check_referral_rewards(callback.from_user.id):

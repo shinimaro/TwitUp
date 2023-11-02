@@ -1,8 +1,5 @@
-import time
-
-from aiogram import Router, Bot
-from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Text, StateFilter
+from aiogram import Router, Bot, F
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
@@ -16,8 +13,9 @@ from bot_apps.adding_task.adding_task_keyboards import select_actions_builder, s
     not_money_keyboard_builder, not_payments_builder
 from bot_apps.adding_task.adding_task_text import task_setting_text_builder, \
     text_under_comment_parameters_builder, text_under_adding_one_parameter_builder, define_price, final_text_builder, \
-    no_money_text_builder
-from bot_apps.databases.database import db
+    no_money_text_builder, count_commission, text_before_posting
+from bot_apps.filters.ban_filters.is_banned import IsBanned
+from databases.database import db
 from bot_apps.other_apps.main_menu.main_menu_functions import delete_old_interface
 from bot_apps.wordbank import add_task
 from config.config import load_config
@@ -27,9 +25,12 @@ router = Router()
 config = load_config()
 bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
 
+router.callback_query.filter(IsBanned())
+router.message.filter(IsBanned())
+
 
 # Пользователь решил добавить новое задание
-@router.callback_query(Text(text=['add_task']))
+@router.callback_query(F.data == 'add_task')
 async def add_new_task(callback: CallbackQuery, state: FSMContext):
     # Задаются все нужные объекты
     await state.set_state(FSMAddTask.add_task)
@@ -46,7 +47,7 @@ async def add_new_task(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь выбрал одно из действий, либо перешёл обратно к выбору действий
-@router.callback_query(lambda x: x.data.startswith('add_new_'), StateFilter(FSMAddTask.add_task))
+@router.callback_query(F.data.startswith('add_new_'), StateFilter(FSMAddTask.add_task))
 async def user_select_action(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     # Если ключ уже есть в списке, то убираем его
@@ -59,7 +60,7 @@ async def user_select_action(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь вернулся к выбору действий
-@router.callback_query(Text(text=['back_to_setting_task']))
+@router.callback_query(F.data == 'back_to_setting_task')
 async def user_back_select_action(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await callback.message.edit_text(add_task['start_text'],
@@ -67,7 +68,7 @@ async def user_back_select_action(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь выбрал нужные ему действия и открыл страницу настроек
-@router.callback_query(Text(text=['accept_settings_task', 'back_accept_setting_task']))
+@router.callback_query(F.data.in_('accept_settings_task' 'back_accept_setting_task'))
 async def open_page_settings(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FSMAddTask.add_task)
     data = await state.get_data()
@@ -81,7 +82,7 @@ async def open_page_settings(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь задаёт один из параметров
-@router.callback_query(lambda x: x.data.startswith('add_in_task_'))
+@router.callback_query(F.data.startswith('add_in_task_'))
 async def user_sets_preferences(callback: CallbackQuery, state: FSMContext):
     # Пользователь задаёт ссылку на профиль
     if callback.data[12:] == 'profile_link':
@@ -108,14 +109,10 @@ async def insert_link_profile(message: Message, state: FSMContext):
     is_correct = await is_correct_profile_link(message.text)
     # Пользователь ввёл неправильные данные и вернулся текст ошибки, а не введённый аккаунт
     if len(is_correct.split()) != 1:
-        # Защита от ошибки изменения сообщения на тот же самый текст
-        try:
-            await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
-                                        chat_id=message.chat.id,
-                                        text=is_correct.format(message.text),
-                                        reply_markup=await back_button_to_setting_task_builder())
-        except TelegramBadRequest:
-            pass
+        await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
+                                    chat_id=message.chat.id,
+                                    text=is_correct.format(message.text),
+                                    reply_markup=await back_button_to_setting_task_builder())
     # Пользователь ввёл верные данные
     else:
         await state.set_state(FSMAddTask.add_task)
@@ -135,18 +132,15 @@ async def insert_post_link(message: Message, state: FSMContext):
     is_correct = await is_correct_post_link(message.text)
     # Если пользователь ввёл некорректную ссылку
     if not is_correct:
-        # Защита от ошибки изменения сообщения на тот же самый текст
-        try:
-            await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
-                                        chat_id=message.chat.id,
-                                        text=add_task['not_correct_link_post'].format(message.text if message.text else ''),
-                                        reply_markup=await back_button_to_setting_task_builder())
-        except TelegramBadRequest:
-            pass
+        await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
+                                    chat_id=message.chat.id,
+                                    text=add_task['not_correct_link_post'].format(message.text if message.text else ''),
+                                    reply_markup=await back_button_to_setting_task_builder())
     # Если пользователь ввёл корректную ссылку
     else:
         await state.set_state(FSMAddTask.add_task)
-        data['accepted']['post_link'] = message.text.lower()
+        link = message.text.lower()
+        data['accepted']['post_link'], data['accepted']['profile_link'] = link, link[:message.text.find('/status/')]
         await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
                                     chat_id=message.chat.id,
                                     text=await task_setting_text_builder(data.get('setting_actions'),
@@ -156,7 +150,7 @@ async def insert_post_link(message: Message, state: FSMContext):
 
 
 # Пользователь вернулся в главное меню настройки комментариев
-@router.callback_query(Text(text=['back_to_comment_parameters']))
+@router.callback_query(F.data == 'back_to_comment_parameters')
 async def back_to_comment_parameters(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await callback.message.edit_text(await text_under_comment_parameters_builder(data['accepted']['comment_parameters']),
@@ -165,7 +159,7 @@ async def back_to_comment_parameters(callback: CallbackQuery, state: FSMContext)
 
 
 # Пользователь переходит в меню для добавления критерия проверки комментария
-@router.callback_query(Text(text=['add_checking_comment', 'back_to_checking_comment']))
+@router.callback_query(F.data.in_('add_checking_comment' 'back_to_checking_comment'))
 async def open_add_checking_comment(callback: CallbackQuery, state: FSMContext):
     # Если пользователь вернулся во время того, как задать какой-нибудь параметр
     data = await state.get_data()
@@ -198,7 +192,7 @@ async def add_key_tags_and_words(callback: CallbackQuery, state: FSMContext):
 
 
 # Переключатель для открытия выбора одной из 3 ключевых настроек комментария для его проверки
-@router.callback_query(lambda x: x.data.startswith('add_in_comment_'))
+@router.callback_query(F.data.startswith('add_in_comment_'))
 async def add_parameter_in_comment(callback: CallbackQuery, state: FSMContext):
     setting = callback.data[15:]
     # Пользователь хочет указать количество слов
@@ -213,7 +207,7 @@ async def add_parameter_in_comment(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь выбирает минимальное количество слов или тэгов
-@router.callback_query(lambda x: x.data.startswith('minimum_words_') or x.data.startswith('minimum_tags_'))
+@router.callback_query(F.data.startswith('minimum_words_') | F.data.startswith('minimum_tags_'))
 async def add_minimum_value(callback: CallbackQuery, state: FSMContext):
     value = callback.data.replace('minimum_words_', '').replace('minimum_tags_', '')
     data = await state.get_data()
@@ -235,13 +229,9 @@ async def add_key_word(message: Message, state: FSMContext):
     is_correct = await is_correct_words_or_tags(message.text, True if data['accepted']['comment_parameters'].get('only_english', None) else False)
     # Если функция вернула не словарь с тегами и наборами слов, а текст с ошибкой
     if isinstance(is_correct, str):
-        # Защита от ошибки изменения сообщения на тот же самый текст
-        try:
-            await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
-                                        chat_id=message.chat.id,
-                                        text=is_correct, reply_markup=await back_to_checking_comment_builder())
-        except TelegramBadRequest:
-            pass
+        await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
+                                    chat_id=message.chat.id,
+                                    text=is_correct, reply_markup=await back_to_checking_comment_builder())
     else:
         data['accepted']['comment_parameters']['one_value'] = {'words': False, 'tags': False, 'tags/words': is_correct}
         await state.set_state(FSMAddTask.add_task)
@@ -252,7 +242,7 @@ async def add_key_word(message: Message, state: FSMContext):
 
 
 # Пользователь убирает все заданные ключевые параметры
-@router.callback_query(Text(text=['delete_comment_key_parameters']))
+@router.callback_query(F.data == 'delete_comment_key_parameters')
 async def delete_comment_parameters(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     data['accepted']['comment_parameters']['one_value'] = {}
@@ -262,7 +252,7 @@ async def delete_comment_parameters(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь добавляет примечание к комментарию
-@router.callback_query(Text(text=['add_note']))
+@router.callback_query(F.data == 'add_note')
 async def add_note_in_comment(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FSMAddTask.add_note)
     data = await state.get_data()
@@ -278,13 +268,9 @@ async def insert_note_in_comment(message: Message, state: FSMContext):
     is_correct = await is_correct_note(message.text)
     # Если вернулось сообщение с текстом ошибки
     if isinstance(is_correct, str):
-        # Защита от ошибки изменения сообщения на тот же самый текст
-        try:
-            await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
-                                        chat_id=message.chat.id,
-                                        text=is_correct, reply_markup=await add_note_in_comment_builder(data.get('accepted')))
-        except TelegramBadRequest:
-            pass
+        await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
+                                    chat_id=message.chat.id,
+                                    text=is_correct, reply_markup=await add_note_in_comment_builder(data.get('accepted')))
     # Если вернулся словарь с заполненными ключевыми словами/тегами
     else:
         await state.set_state(FSMAddTask.add_task)
@@ -296,7 +282,7 @@ async def insert_note_in_comment(message: Message, state: FSMContext):
 
 
 # Пользователь решил удалить добавленное примечание к комментарию
-@router.callback_query(Text(text=['delete_note']))
+@router.callback_query(F.data == 'delete_note')
 async def delete_adding_note(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await state.set_state(FSMAddTask.add_task)
@@ -306,7 +292,7 @@ async def delete_adding_note(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь решил включить только "английский язык"
-@router.callback_query(Text(text=['only_english']))
+@router.callback_query(F.data == 'only_english')
 async def change_only_english(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     if 'only_english' not in data['accepted']['comment_parameters'] or not data['accepted']['comment_parameters']['only_english']:
@@ -329,14 +315,14 @@ async def change_only_english(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь решил выйти из меню настройки заданий, но уже задал какие-то настройки
-@router.callback_query(Text(text=['exactly_to_back_main_menu']))
+@router.callback_query(F.data == 'exactly_to_back_main_menu')
 async def exactly_back_to_main_menu(callback: CallbackQuery):
     await callback.message.edit_text(text=add_task['you_really_leave'],
                                      reply_markup=await do_you_really_want_to_leave_builder())
 
 
 # Пользователь указал все нужные ему настройки для своих заданий и нажимает "продолжить"
-@router.callback_query(Text(text=['accept_all_settings', 'back_accept_all_setting']))
+@router.callback_query(F.data.in_('accept_all_settings' 'back_accept_all_setting'))
 async def accept_all_settings(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     balance = await db.check_payment(callback.from_user.id)
@@ -363,7 +349,7 @@ async def accept_all_settings(callback: CallbackQuery, state: FSMContext):
 
 # Пользователь вводит количество тех, кто должен выполнить задание
 @router.message(StateFilter(FSMAddTask.add_quantity_users))
-@router.callback_query(lambda x: x.data.startswith('choice_execute_'))
+@router.callback_query(F.data.startswith('choice_execute_'))
 async def insert_number_users(message_from_user: Message | CallbackQuery, state: FSMContext):
     data = await state.get_data()
     # Если пользователь ввёл число
@@ -399,27 +385,24 @@ async def insert_number_users(message_from_user: Message | CallbackQuery, state:
                                         reply_markup=await not_money_keyboard_builder(balance_flag=True))
         # Если баланса хватает на оплату задания и всё ок
         else:
+            text = add_task['final_confirmation'].format(need, balance, round(balance-need, 2), prices) + await text_before_posting(telegram_id, data)
             await bot.edit_message_text(message_id=await db.get_main_interface(telegram_id),
                                         chat_id=chat_id,
-                                        text=add_task['final_confirmation'].format(need, balance, prices),
+                                        text=text,
                                         reply_markup=await final_add_task_builder())
             await state.update_data(number_users=number_users)
             await state.set_state(FSMAddTask.add_task)
 
     # Если пользователь ввёл не число
     except ValueError or TypeError:
-        # Защита от ошибки изменения сообщения на тот же самый текст
-        try:
-            await bot.edit_message_text(message_id=await db.get_main_interface(telegram_id),
-                                        chat_id=chat_id,
-                                        text=data.get('text') + '\n\n<code>Упс, кажется, ты ввёл не число</code>',
-                                        reply_markup=await add_number_user_builder(await db.check_balance(telegram_id), data))
-        except TelegramBadRequest:
-            pass
+        await bot.edit_message_text(message_id=await db.get_main_interface(telegram_id),
+                                    chat_id=chat_id,
+                                    text=data.get('text') + '\n\n<code>Упс, кажется, ты ввёл не число</code>',
+                                    reply_markup=await add_number_user_builder(await db.check_balance(telegram_id), data))
 
 
-# # Пользователь добавил новое задание
-@router.callback_query(Text(text=['add_finally_task']))
+# Пользователь добавил новое задание
+@router.callback_query(F.data == 'add_finally_task')
 async def add_finally_task(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     # Проверка баланса перед тем, как добавить задание (чтоб юзер с нескольких интерфейсов не открыл меню добавления задания и не добавил сразу их несколько
@@ -430,8 +413,9 @@ async def add_finally_task(callback: CallbackQuery, state: FSMContext):
                                          reply_markup=await not_money_keyboard_builder(balance_flag=True))
     else:
         await db.add_new_task(int(callback.from_user.id),
-                              float(await define_price(data, data['number_users'])),
-                              await define_price(data),
+                              float(await define_price(data, data['number_users']) - await count_commission(data, data['number_users'])),
+                              await define_price(data, data['number_users']),
+                              float(await define_price(data) - await count_commission(data)),
                               data['number_users'],
                               data['setting_actions'],
                               data['accepted'])

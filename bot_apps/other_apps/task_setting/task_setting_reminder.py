@@ -4,7 +4,7 @@ from asyncio import sleep
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 
-from bot_apps.databases.database import db
+from databases.database import db
 from bot_apps.other_apps.task_setting.task_setting_keyboards import keyboard_under_reminder_builder
 from bot_apps.wordbank import setting
 from config import load_config

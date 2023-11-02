@@ -7,7 +7,7 @@ class TgBot:
     token: str
     support_name: str
     support_id: int
-    admins: list[str]
+    admin: int
     superadmin: str
     feedback_group: str
 
@@ -27,17 +27,15 @@ class Proxy:
 
 
 @dataclass
-class TwitterLogin:
+class BaseTwitterAccount:
     tw_login: str
     tw_password: str
 
 
 @dataclass
-class TaskPrice:
-    subscriptions: int
-    likes: int
-    retweets: int
-    comments: int
+class Webdrivers:
+    num_webdrivers: int
+    max_webdrivers: int
 
 
 @dataclass
@@ -45,8 +43,8 @@ class Config:
     tg_bot: TgBot
     database: DatabaseConfig
     proxy: Proxy
-    twitter_login: TwitterLogin
-    task_price: TaskPrice
+    base_twitter_account: BaseTwitterAccount
+    webdrivers: Webdrivers
 
 
 def load_config(path: str | None = None) -> Config:
@@ -55,7 +53,7 @@ def load_config(path: str | None = None) -> Config:
     return Config(tg_bot=(TgBot(token=env('BOT_TOKEN'),
                                 support_name=env('SUPPORT_NAME'),
                                 support_id=env('ADMIN_IDS'),
-                                admins=list(map(int, env.list('ADMIN_IDS'))),
+                                admin=int(env('ADMIN_IDS')),
                                 superadmin=env('SUPERADMIN_ID'),
                                 feedback_group=env('FEEDBACK_GROUP'))),
                   database=(DatabaseConfig(db_host=env('HOST'),
@@ -64,13 +62,9 @@ def load_config(path: str | None = None) -> Config:
                                            db_name=env('DB_NAME'))),
                   proxy=(Proxy(proxy_host=env('PROXY_HOST'),
                                proxy_port=int(env('PROXY_PORT')))),
-                  twitter_login=(TwitterLogin(tw_login=env('TWITTER_LOGIN'),
-                                              tw_password=env('TWITTER_PASSWORD'))),
-                  task_price=(TaskPrice(subscriptions=int(env('SUBSCRIPTIONS')),
-                                        likes=int(env('LIKES')),
-                                        retweets=int(env('RETWEETS')),
-                                        comments=int(env('COMMENTS')))))
-
-
+                  base_twitter_account=(BaseTwitterAccount(tw_login=env('TWITTER_LOGIN'),
+                                                           tw_password=env('TWITTER_PASSWORD'))),
+                  webdrivers=(Webdrivers(num_webdrivers=int(env('WEBDRIVERS')),
+                                         max_webdrivers=int(env('MAX_WEBDRIVERS')))))
 
 

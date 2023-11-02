@@ -1,15 +1,13 @@
-import time
 from asyncio import sleep
 
-from aiogram import Router, Bot
-from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Text, StateFilter
+from aiogram import Router, Bot, F
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
 from bot_apps.FSM.FSM_states import FSMAccounts
-from bot_apps.databases.database import db
-from bot_apps.limit_filter.limit_filter import MainFiter
+from bot_apps.filters.ban_filters.is_banned import IsBanned
+from databases.database import db
 from bot_apps.personal_office.first_steps.first_steps_keyboards import first_account_builder, add_first_account_builder, \
     before_check_first_account_builder, completion_add_first_account_builder, \
     completion_of_training_builder, button_back_under_ruled_from_training_builder, \
@@ -23,17 +21,20 @@ from config import load_config
 router = Router()
 config = load_config()
 bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
+router.callback_query.filter(IsBanned())
+router.message.filter(IsBanned())
 
 
 # Добавление своего самого первого аккаунта
-@router.callback_query(Text(text=['add_first_account', 'back_at_specify_account']))
+@router.callback_query(F.data == 'add_first_account')
+@router.callback_query(F.data == 'back_at_specify_account') # колбеки не соединять через in
 async def add_first_account(callback: CallbackQuery):
     await callback.message.edit_text(accounts['education_1'],
                                      reply_markup=await first_account_builder())
 
 
 # Возвращение в меню добавление первого аккаунта (если необходимо удалить сообщение)
-@router.callback_query(Text(text=['back_to_first_account']))
+@router.callback_query(F.data == 'back_to_first_account')
 async def add_first_account(callback: CallbackQuery):
     await callback.message.delete()
     message_id = await callback.message.answer(accounts['education_1'],
@@ -42,7 +43,7 @@ async def add_first_account(callback: CallbackQuery):
 
 
 # Пользователь учится добавлять аккаунт
-@router.callback_query(Text(text=['specify_account', 'change_first_account']))
+@router.callback_query(F.data.in_('specify_account' 'change_first_account'))
 async def adding_an_account(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
     message_id = await callback.message.answer_photo(photo='https://disk.yandex.ru/i/97G2fkTFxPYZKw', caption=accounts['education_2'],
@@ -55,11 +56,7 @@ async def adding_an_account(callback: CallbackQuery, state: FSMContext):
 @router.message(StateFilter(FSMAccounts.add_first_account))
 async def input_first_account(message: Message, state: FSMContext):
     is_correct = await correct_account(message.from_user.id, message.text.strip() if message.text else None)
-    try:
-        await bot.delete_message(message_id=await db.get_main_interface(message.from_user.id),
-                                 chat_id=message.chat.id)
-    except TelegramBadRequest:
-        pass
+    await bot.delete_message(message_id=await db.get_main_interface(message.from_user.id), chat_id=message.chat.id)
     # Если вернулся текст с ошибкой
     if isinstance(is_correct, str):
         message_id = await message.answer_photo(photo='https://disk.yandex.ru/i/97G2fkTFxPYZKw',
@@ -79,7 +76,7 @@ async def input_first_account(message: Message, state: FSMContext):
 
 
 # Пользователь не подписался на аккаунт
-@router.callback_query(lambda x: x.data.startswith('try_again_education_'))
+@router.callback_query(F.data.startswith('try_again_education_'))
 async def process_fail_check(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     # check_2 = await func()
@@ -103,7 +100,7 @@ async def process_fail_check(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь подписался на канал
-@router.callback_query(Text(text=['check_first_task']))
+@router.callback_query(F.data == 'check_first_task')
 async def process_check_first_task(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     # first_check = func()
@@ -128,14 +125,14 @@ async def process_check_first_task(callback: CallbackQuery, state: FSMContext):
 
 
 # Переход обратно в меню с информацией о добавлении первого аккаунта
-@router.callback_query(Text(text=['back_check_first_task']))
+@router.callback_query(F.data == 'back_check_first_task')
 async def back_check_first_task(callback: CallbackQuery):
     await callback.message.edit_text(accounts['result_check'],
                                      reply_markup=await completion_add_first_account_builder())
 
 
 # Первое включение всех уведомлений
-@router.callback_query(Text(text=['allow_enabling_tasks', 'back_at_end_training_true']))
+@router.callback_query(F.data.in_('allow_enabling_tasks' 'back_at_end_training_true'))
 async def enable_all_notifications(callback: CallbackQuery):
     await db.enable_all_on(callback.from_user.id)
     await callback.message.edit_text(accounts['notifications_enabled'].format(0, 0, 0, 0),
@@ -150,14 +147,14 @@ async def enable_all_notifications(callback: CallbackQuery):
 #     await db.enable_all_off(callback.message.message_id)
 
 # Открытие правил пользования сервисов из начала обучения
-@router.callback_query(Text(text=['rules_from_training']))
+@router.callback_query(F.data == 'rules_from_training')
 async def open_rules_from_training(callback: CallbackQuery):
     await callback.message.edit_text(text=rules['main_text'],
                                      reply_markup=await button_back_under_ruled_from_training_builder())
 
 
 # Открытие правил пользования в конце обучения
-@router.callback_query(Text(text=['rules_from_end_training_notice', 'rules_from_end_training_without_notice']))
+@router.callback_query(F.data.in_('rules_from_end_training_notice' 'rules_from_end_training_without_notice'))
 async def open_rules_from_end_training(callback: CallbackQuery):
     await callback.message.edit_text(rules['main_text'],
                                      reply_markup=await button_back_under_rules_from_end_training_builder(
@@ -165,7 +162,7 @@ async def open_rules_from_end_training(callback: CallbackQuery):
 
 
 # Блок с конкретным ответом на вопрос, как апнуть уровень аккаунта
-@router.callback_query(Text(text=['how_up_level']))
+@router.callback_query(F.data == 'how_up_level')
 async def open_up_level_instruction(callback: CallbackQuery):
     await callback.message.edit_text(rules['how_up_level'],
                                      reply_markup=await how_up_to_level_builder())

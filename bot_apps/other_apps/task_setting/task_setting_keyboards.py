@@ -1,7 +1,7 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder as BD
 from aiogram.types import InlineKeyboardButton as IB
 
-from bot_apps.databases.database import db
+from databases.database import db
 from bot_apps.wordbank.wordlist import setting, BACK_MAIN_MENU
 
 # Функция для настройки клавиатуры для настройки уведомлений о заданиях

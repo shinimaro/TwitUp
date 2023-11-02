@@ -1,4 +1,4 @@
-from bot_apps.databases.database import db
+from databases.database import db
 from bot_apps.wordbank import task_completion
 
 
@@ -24,21 +24,29 @@ async def _comment_note_text_builder(info):
     return note_text
 
 
+# Функция для билдинга типа задания и его номера (1. лайк, 2. ретвит и т.д.)
+async def _task_list_builder(tasks: list) -> str:
+    action_order = {'subscriptions': 1, 'likes': 2, 'retweets': 3, 'comments': 4}
+    sorted_action = sorted(tasks, key=lambda x: action_order.get(x))
+    action_dict = {'subscriptions': 'Подписка', 'likes': 'Лайк', 'retweets': 'Ретвит', 'comments': 'Комментарий'}
+    return ''.join(['<b>' + str(i + 1) + '</b>' + '. ' + action_dict[action] + '\n' for i, action in enumerate(sorted_action)])
+
+
 # Билдер текста перед началом задания, который подробно говорит, что нужно делать
 async def full_text_task_builder(tasks_msg_id):
     task_info = await db.open_task(int(tasks_msg_id))
+    if not task_info:
+        return None
     text = '✨<b>Новое задание✨</b>\n'
     text += f'<b>Награда: {int(task_info["price"]) if task_info["price"].is_integer() else round(task_info["price"], 2)} $STB</b>\n\n'
 
     text += '<b>Действия:</b>\n'
-    # Своеобразная сортировка и добавление заданий, в соответствии с их нумерацией
-    action_order = {'subscriptions': 1, 'likes': 2, 'retweets': 3, 'comments': 4}
-    sorted_action = sorted(task_info['type_task'], key=lambda x: action_order.get(x))
-    action_dict = {'subscriptions': 'Подписка', 'likes': 'Лайк', 'retweets': 'Ретвит', 'comments': 'Комментарий'}
-    text += ''.join(['<b>' + str(i + 1) + '</b>' + '. ' + action_dict[action] + '\n' for i, action in enumerate(sorted_action)])
-
+    text += await _task_list_builder(task_info['type_task'])
     # Если были заданы настройки комментария
     text += await _comment_note_text_builder(task_info['comment_parameter']) if 'comment_parameter' in task_info and task_info['comment_parameter'] else ''
+
+    limit_executions = await db.get_task_limit(tasks_msg_id)
+    text += f'\n<b>Задание доступно к выполнению с {limit_executions} аккаунтов</b>\n'
 
     text += '\n<i>После того, как ты нажмёшь кнопку "</i>👨‍🦽<i>Начать задание", у тебя будет 10 минут на его выполнение. Удачи</i>🧚‍♂️'
 
@@ -52,7 +60,7 @@ async def full_text_task_builder(tasks_msg_id):
 
 # Билдер самого текста задания
 # Если будешь что-то редачить здесь, в функции ниже надо будет тоже это сделать
-async def context_task_builder(tasks_msg_id: int | str, account: str, not_complete: bool = None) -> str:
+async def context_task_builder(tasks_msg_id: int | str, account: str, not_complete=None) -> str:
     task_info = await db.open_task(int(tasks_msg_id))
     link_action = await db.get_link_action(tasks_msg_id)
     text = f"А вот и комплексное задание🧞\n\n<b>Что обязательно нужно сделать?</b> ({len(task_info['type_task'])} действия):\n\n"
@@ -137,7 +145,7 @@ async def control_statistic_builder(tg_id, tasks_msg_id):
     # Текст со статистикой
     text += '<b>А пока немного статистики:</b>\n\n'
     info_dict = await db.get_info_to_user_and_tasks(tg_id)
-    text += f"<b>Актуальный баланс: {info_dict['balance'] if info_dict['balance'].is_integer() else round(info_dict['balance'], 2)} STB$</b>\n"
+    text += f"<b>Актуальный баланс: {int(info_dict['balance']) if info_dict['balance'].is_integer() else round(info_dict['balance'], 2)} STB$</b>\n"
     text += f"<b>Заданий выполнено сегодня: {info_dict['tasks_completed']}</b>\n"
     text += f"<b>Доступно к выполнению на всех аккаунтах: {info_dict['open_tasks']}</b>\n"
 
@@ -147,4 +155,14 @@ async def control_statistic_builder(tg_id, tasks_msg_id):
     return text
 
 
-
+# Билдер письма счастья (во время проверки задания) о том, что другие пользователи успели завершить задание раньше, чем этот пользователь и теперь он может отписаться от всех ссылок
+async def chain_letter_builder(tasks_msg_id):
+    info_dict = await db.info_about_task(tasks_msg_id)
+    text = task_completion['task_ended_during_check']
+    if '/status/' not in info_dict['link'] and len(info_dict['types_actions']) == 1:
+        text += f"<b>Ссылка на профиль:</b> {info_dict['link']}\n\n"
+        text += 'Ты выполнял только подписку на этот канал'
+    else:
+        text += f"<b>Ссылка на пост:</b> {info_dict['link']}\n\n"
+        text += f"<b>Ты выполнил:</b>\n{await _task_list_builder(info_dict['types_actions'])}"
+    return text

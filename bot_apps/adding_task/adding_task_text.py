@@ -1,6 +1,6 @@
 import re
 
-from bot_apps.databases.database import db
+from databases.database import db
 from bot_apps.wordbank.wordlist import add_task
 from config import load_config
 
@@ -133,34 +133,46 @@ async def text_under_adding_one_parameter_builder(info):
     return main_text
 
 
+# Находит итоговую комиссию
+async def count_commission(data, count=1):
+    total_price = await define_price(data, count)
+    original_price = total_price / (1 + await db.get_commission() / 100)
+    commission = total_price - original_price
+    return int(commission) if commission.is_integer() else round(commission, 2)
+
+
 # Добавляет тот прайс, который будет за определённое количество заданий
 async def define_price(data: dict, count=1) -> int:
     sum = 0
     type_tasks = data['setting_actions']
-
+    prices_dict = await db.get_prices()
     if 'subscriptions' in type_tasks:
-        sum += config.task_price.subscriptions
+        sum += prices_dict['subscriptions']
     if 'likes' in type_tasks:
-        sum += config.task_price.likes
+        sum += prices_dict['likes']
     if 'retweets' in type_tasks:
-        sum += config.task_price.retweets
+        sum += prices_dict['retweets']
     if 'comments' in type_tasks:
-        sum += config.task_price.comments
+        sum += prices_dict['comments']
 
-    if count:
-        return sum * count
-    return sum
+    # Считает комиссию
+    sum += (sum / 100 * await db.get_commission())
+    sum *= count
+    return int(sum) if sum.is_integer() else round(sum, 2)
 
 
 # Текст, который показывает пользователю, почему такая стоимость задания
 async def final_text_builder(data: dict) -> str:
-    answer_dict = {'subscriptions': f'<b>+{config.task_price.subscriptions} $STB за подписку</b>',
-                   'likes': f'<b>+{config.task_price.likes} $STB за поставленный лайк</b>',
-                   'retweets': f'<b>+{config.task_price.retweets} $STB за ретвит</b>',
-                   'comments': f'<b>+{config.task_price.comments} $STB за комментарий</b>'}
+    prices_dict = await db.get_prices()
+    answer_dict = {'subscriptions': f"<b>+{prices_dict['subscriptions']} $STB за подписку</b>",
+                   'likes': f"<b>+{prices_dict['likes']} $STB за поставленный лайк</b>",
+                   'retweets': f"<b>+{prices_dict['retweets']} $STB за ретвит</b>",
+                   'comments': f"<b>+{prices_dict['comments']} $STB за комментарий</b>",
+                   'commission': f"<b>+{await count_commission(data)} $STB в качестве комиссии за добавление задания</b>"}
     prices = ''
     for type_task in data['setting_actions']:
         prices += answer_dict[type_task] + '\n'
+    prices += answer_dict['commission'] + '\n'
 
     return prices
 
@@ -180,4 +192,61 @@ async def no_money_text_builder(data, balance: float, balance_flag: bool = False
         text = 'Упс, как я вижу, <b>твоего баланса не хватит на добавление минимального количества выполнений, равного <code>5</code> 🥲</b>\n\n' + \
                 add_task['not_have_need_balance'].format(need, balance, result, await final_text_builder(data))
     return text
+
+
+
+
+# Уёбищнейшая функция, собирающая текст-предупреждение о том, что мы не сможем выполнить задание, либо его выполнение может сильно затянуться
+async def text_before_posting(tg_id, data):
+    exceptions = await db.feasibility_check(tg_id, data)
+    # Если ошибок нет, ничего не отправляем
+    if not exceptions:
+        return ''
+
+    text = '\nПредупреждение: '
+    executions = {}
+    for action in exceptions:
+        execution = await db.get_number_executions(data['accepted']['profile_link'] if action == 'subscriptions' else data['accepted']['post_link'], action)
+        if execution > 20:
+            executions[action] = execution
+    # Собираем основные предупреждения, если они есть (это о том, что мы такой объём просто не вывезем, у нас аккаунтов столько нет)
+    basic_warnings = []
+    for action, exception in exceptions.items():
+        if exception == 'NotEnoughAccounts':
+            basic_warnings.append(action)
+
+    if basic_warnings:
+        exceptions_basic_warning = {key: value for key, value in executions.items() if key in basic_warnings}
+        dop_text = ''
+        dop_dict = {'subscriptions': 'подписку', 'likes': 'лайк', 'retweets': 'ретвит', 'comments': 'комментарий'}
+        for action in exceptions_basic_warning:
+            if action == 'subscriptions':
+                dop_text += 'подписку на указанный тобой аккаунт' + (', а также ' if 'likes' in exceptions_basic_warning or 'retweets' in exceptions_basic_warning or 'comments' in exceptions_basic_warning else '')
+            else:
+                dop_text += f"{', '.join([dop_dict[action] for action in exceptions_basic_warning if action != 'subscriptions'])} на указанный тобой пост"
+                break
+        if dop_text:
+            text += dop_text + ' уже много раз выполняли\n'
+        else:
+            text += 'кажется, ты ввёл слишком большое количество заданий'
+
+        dop = f", либо же убрать {list(dop_dict)[0] + ' из действий в задании' if len(dop_dict) == 1 else 'одно из действий в задании'}" if dop_text else ''
+        text += f"Поскольку у нас нет такого количества аккаунтов, которые смогут выполнить твоё задание, его выполнение может затянуться. Во избежание этого, ты можешь уменьшить число выполнений" + dop
+
+    else:
+        dop_text = ''
+        dop_dict = {'subscriptions': 'подписку', 'likes': 'лайк', 'retweets': 'ретвит', 'comments': 'комментарий'}
+        for action in executions:
+            if action == 'subscriptions':
+                dop_text += 'подписку на указанный тобой аккаунт' + (
+                    ', а также ' if 'likes' in executions or 'retweets' in executions or 'comments' in executions else '')
+            else:
+                dop_text += f"{', '.join([dop_dict[action] for action in executions if action != 'subscriptions'])} на указанный тобой пост"
+                break
+        if dop_text:
+            text += dop_text + ' уже много раз выполняли\n'
+        dop = f", либо же убрать {list(dop_dict)[0] + ' из действий в задании' if len(dop_dict) == 1 else 'одно из действий в задании'}" if dop_text else ''
+        text = 'Выполнение данного задания может затянуться. Во избежание этого, ты можешь уменьшить число выполнений' + dop
+
+    return f'<i>{text}</i>'
 

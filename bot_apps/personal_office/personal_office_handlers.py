@@ -1,14 +1,13 @@
-import time
 from asyncio import sleep
 
-from aiogram import Router, Bot
-from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Text, StateFilter
+from aiogram import Router, Bot, F
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
 from bot_apps.FSM.FSM_states import FSMAccounts
-from bot_apps.databases.database import db
+from bot_apps.filters.ban_filters.is_banned import IsBanned
+from databases.database import db
 from bot_apps.other_apps.main_menu.main_menu_functions import delete_old_interface
 from bot_apps.personal_office.personal_office_filters import correct_account
 from bot_apps.personal_office.personal_office_keyboards import personal_account_builder, list_account_builder, \
@@ -25,10 +24,12 @@ from config import load_config
 config = load_config()
 router = Router()
 bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
+router.callback_query.filter(IsBanned())
+router.message.filter(IsBanned())
 
 
 # Пользователь вошёл в личный кабинет
-@router.callback_query(Text(text=['personal_account', 'back_to_personal_account']))
+@router.callback_query(F.data.in_('personal_account' 'back_to_personal_account'))
 async def process_open_personal_account(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await personal_account_text_builder(callback.from_user.id),
                                      reply_markup=await personal_account_builder(callback.from_user.id))
@@ -36,7 +37,7 @@ async def process_open_personal_account(callback: CallbackQuery, state: FSMConte
 
 
 # Возвращение в личный кабинет во время обучения
-@router.callback_query(Text(text=['back_to_personal_account_after_education']))
+@router.callback_query(F.data == 'back_to_personal_account_after_education')
 async def back_to_personal_account(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
     message_id = await callback.message.answer(await personal_account_text_builder(callback.from_user.id),
@@ -46,7 +47,7 @@ async def back_to_personal_account(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь открыл меню с аккаунтами
-@router.callback_query(Text(text=['accounts']))
+@router.callback_query(F.data == 'accounts')
 async def process_open_accounts(callback: CallbackQuery, state: FSMContext):
     accounts_dict = await db.get_accounts(callback.from_user.id)
     accounts_list = await accounts_text_builder(accounts_dict)
@@ -58,7 +59,7 @@ async def process_open_accounts(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь перебирает свои аккаунты
-@router.callback_query(lambda x: x.data.startswith('accounts_page_'), StateFilter(FSMAccounts.accounts_menu))
+@router.callback_query(F.data.startswith('accounts_page_'), StateFilter(FSMAccounts.accounts_menu))
 async def pagination_accounts(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     page = callback.data[14:] if callback.data.startswith('accounts_page_') else data.get('page')
@@ -70,14 +71,8 @@ async def pagination_accounts(callback: CallbackQuery, state: FSMContext):
     await state.update_data(page=callback.data[14:] if callback.data.startswith('accounts_page_') else data.get('page'))
 
 
-# Пропуск кнопок, которые не должны никак реагировать, чтобы они не грузились
-@router.callback_query(Text(text=['other_apps']))
-async def other_answer(callback: CallbackQuery):
-    await callback.answer()
-
-
 # Пользователь открыл один из аккаунтов
-@router.callback_query(lambda x: x.data.startswith('account_') or x.data.startswith('back_to_account_'),  StateFilter(FSMAccounts.accounts_menu))
+@router.callback_query(F.data.startswith('account_') | F.data.startswith('back_to_account_'),  StateFilter(FSMAccounts.accounts_menu))
 async def open_account(callback: CallbackQuery, state: FSMContext):
     # Изменение имени в связи с тем, что другие хендлеры могут пользоваться этой функцией
     name = callback.data[8:] if callback.data.startswith('account_') else callback.data.replace('disable_', '').replace('enable_', '').replace('back_to_account_', '').replace('rewards_account_', '')
@@ -95,7 +90,7 @@ async def open_account(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь собирает награды на одном из своих аккаунтов
-@router.callback_query(lambda x: x.data.startswith('rewards_account_'),  StateFilter(FSMAccounts.accounts_menu))
+@router.callback_query(F.data.startswith('rewards_account_'),  StateFilter(FSMAccounts.accounts_menu))
 async def get_rewards(callback: CallbackQuery, state: FSMContext):
     collect, balance = await db.collect_rewards(callback.from_user.id, callback.data[16:])
     # Если у пользователя есть несобранный баланс, то говорим, что он собрал его на такую-то сумму
@@ -111,7 +106,7 @@ async def get_rewards(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь выключил/включил аккаунт
-@router.callback_query(lambda x: x.data.startswith('disable_') or x.data.startswith('enable_'),  StateFilter(FSMAccounts.accounts_menu))
+@router.callback_query(F.data.startswith('disable_') | F.data.startswith('enable_'),  StateFilter(FSMAccounts.accounts_menu))
 async def change_status(callback: CallbackQuery, state: FSMContext):
     # Меняем статус аккаунта в базе данных
     await db.change_status_account(callback.from_user.id, callback.data.replace('disable_', '').replace('enable_', ''),
@@ -121,17 +116,18 @@ async def change_status(callback: CallbackQuery, state: FSMContext):
     accounts_list = await accounts_text_builder(accounts_dict)
     await state.update_data(accounts_list=accounts_list)
     await open_account(callback, state)
+    await db.off_all_notifications(callback.from_user.id)
 
 
 # Пользователь решил удалить аккаунт (предварительный вопрос, точно ли он хочет это сделать)
-@router.callback_query((lambda x: x.data.startswith('delete_account_')), StateFilter(FSMAccounts.accounts_menu))
+@router.callback_query((F.data.startswith('delete_account_')), StateFilter(FSMAccounts.accounts_menu))
 async def wants_to_delete_account(callback: CallbackQuery):
     await callback.message.edit_text(accounts['question_delete_button'],
                                      reply_markup=await account_delete_builder(callback.data[15:]))
 
 
 # Пользователь подтвердил удаление аккаунта
-@router.callback_query((lambda x: x.data.startswith('confirm_delete_')), StateFilter(FSMAccounts.accounts_menu))
+@router.callback_query((F.data.startswith('confirm_delete_')), StateFilter(FSMAccounts.accounts_menu))
 async def delete_account(callback: CallbackQuery, state: FSMContext):
     await db.delete_acc_in_db(callback.from_user.id, callback.data[15:])
     await callback.answer(accounts['account_delete'])
@@ -143,10 +139,11 @@ async def delete_account(callback: CallbackQuery, state: FSMContext):
         await pagination_accounts(callback, state)
     else:
         await process_open_accounts(callback, state)
+    await db.off_all_notifications(callback.from_user.id)
 
 
 # Возвращение к аккаунтам
-@router.callback_query(Text(text=['back_to_accounts']))
+@router.callback_query(F.data == 'back_to_accounts')
 async def process_back_to_accounts(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FSMAccounts.accounts_menu)
     data = await state.get_data()
@@ -157,9 +154,9 @@ async def process_back_to_accounts(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователя добавляет новый аккаунт и ему показывается сообщение о том, что нужно ввести
-@router.callback_query(Text(text=['add_account']))
+@router.callback_query(F.data == 'add_account')
 # Пользователь решил поменять название аккаунта на другой
-@router.callback_query(Text(text=['not_add']))
+@router.callback_query(F.data == 'not_add')
 async def process_add_account(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(accounts['add_account'],
                                      reply_markup=await back_button_builder())
@@ -174,13 +171,9 @@ async def adding_account(message: Message, state: FSMContext):
     is_correct = await correct_account(message.from_user.id, message.text.strip() if message.text else '')
     # Если вернулся текст ошибки вместо удовлетворительного ответа
     if isinstance(is_correct, str):
-        # Защита от ошибки изменения сообщения на тот же самый текст
-        try:
-            await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
-                                        chat_id=message.chat.id, text=is_correct,
-                                        reply_markup=await back_button_builder())
-        except TelegramBadRequest:
-            pass
+        await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
+                                    chat_id=message.chat.id, text=is_correct,
+                                    reply_markup=await back_button_builder())
     # Если аккаунт оказался корректен
     else:
         username = message.text.strip() if not message.text.startswith('https://twitter.com/') else '@' + message.text.strip()[20:]
@@ -193,9 +186,8 @@ async def adding_account(message: Message, state: FSMContext):
         await state.update_data(account=username)
 
 
-
 # Проверка только что добавленного аккаунта
-@router.callback_query(Text(text=['confirm_add']))
+@router.callback_query(F.data == 'confirm_add')
 async def process_check_account(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await callback.message.edit_text(accounts['examination'].format(data.get('account')))
@@ -224,10 +216,10 @@ async def process_check_account(callback: CallbackQuery, state: FSMContext):
         if result:
             await callback.message.edit_text(accounts['account_added_2'].format(data.get('account')),
                                              reply_markup=await account_added_successfully_builder())
-
+        await db.off_all_notifications(callback.from_user.id)
 
 # Пользователь зафейлил проверку, т.к. бот не нашёл его в подписках аккаунта
-@router.callback_query(lambda x: x.data.startswith('try_again_'))
+@router.callback_query(F.data.startswith('try_again_'))
 async def try_again_check_account(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await callback.message.edit_text(accounts['examination'].format(data.get('account')))
@@ -247,7 +239,7 @@ async def try_again_check_account(callback: CallbackQuery, state: FSMContext):
 
 
 # Открытие правил пользования сервисов
-@router.callback_query(Text(text=['rules']))
+@router.callback_query(F.data == 'rules')
 async def process_open_rules(callback: CallbackQuery):
     await callback.message.edit_text(text=rules['main_text'],
                                      reply_markup=await button_back_personal_office_builder())
@@ -255,7 +247,7 @@ async def process_open_rules(callback: CallbackQuery):
 
 # Собрать все награды сразу
 # Кнопка появляется, если у пользователя есть несобранные награды с аккаунтов
-@router.callback_query(lambda x: x.data.startswith('collect_all_rewards_'))
+@router.callback_query(F.data.startswith('collect_all_rewards_'))
 async def process_collect_all_rewards(callback: CallbackQuery, state: FSMContext):
     await callback.answer(accounts['collect_all_rewards'].format(callback.data[20:]), show_alert=True)
     await db.collection_of_all_awards(callback.from_user.id)
@@ -263,14 +255,14 @@ async def process_collect_all_rewards(callback: CallbackQuery, state: FSMContext
 
 
 # Пользователь открыл свою личную статистику
-@router.callback_query(Text(text=['statistics']))
+@router.callback_query(F.data == 'statistics')
 async def process_open_personal_statistics(callback: CallbackQuery):
     statistic_dict = await db.statistic_info(callback.from_user.id)
     await callback.message.edit_text(text=statistic['main_text'].format(statistic_dict.get('total_earned', 0),
-                                                                        int(statistic_dict['type']['subscriptions']) if float(statistic_dict['type']['subscriptions']).is_integer() else round(statistic_dict['type']['subscriptions'], 2),
-                                                                        int(statistic_dict['type']['likes']) if float(statistic_dict['type']['likes']).is_integer() else round(statistic_dict['type']['likes'], 2),
-                                                                        int(statistic_dict['type']['retweets']) if float(statistic_dict['type']['retweets']).is_integer() else round(statistic_dict['type']['retweets'], 2),
-                                                                        int(statistic_dict['type']['comments']) if float(statistic_dict['type']['comments']).is_integer() else round(statistic_dict['type']['comments'], 2),
+                                                                        int(statistic_dict['subscriptions']) if float(statistic_dict['subscriptions']).is_integer() else round(statistic_dict['subscriptions'], 2),
+                                                                        int(statistic_dict['likes']) if float(statistic_dict['likes']).is_integer() else round(statistic_dict['likes'], 2),
+                                                                        int(statistic_dict['retweets']) if float(statistic_dict['retweets']).is_integer() else round(statistic_dict['retweets'], 2),
+                                                                        int(statistic_dict['comments']) if float(statistic_dict['comments']).is_integer() else round(statistic_dict['comments'], 2),
                                                                         statistic_dict.get('earned_referrals')),
                                      reply_markup=await button_back_personal_office_builder())
 
@@ -306,7 +298,7 @@ async def process_open_personal_statistics(callback: CallbackQuery):
 
 
 # Пользователь открывает свою историю заданий
-@router.callback_query(Text(text=['task_history', 'history_accounts']))
+@router.callback_query(F.data.in_('task_history' 'history_accounts'))
 async def open_task_history(callback: CallbackQuery, state: FSMContext):
     # Сбор всех аккаунтов, с которых были сделаны задания
     accounts_list = await db.check_completed_task(callback.from_user.id)
@@ -322,7 +314,7 @@ async def open_task_history(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь вернулся к истории аккаунтов
-@router.callback_query(Text(text=['back_to_history']))
+@router.callback_query(F.data == 'back_to_history')
 async def open_back_to_history(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await callback.message.edit_text(history_task['history_start'],
@@ -331,7 +323,7 @@ async def open_back_to_history(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь ходит по аккаунтам в истории аккаунтов
-@router.callback_query(lambda x: x.data.startswith('history_page_'))
+@router.callback_query(F.data.startswith('history_page_'))
 async def open_history_page(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await state.update_data(history_page=int(callback.data[13:]))
@@ -340,7 +332,7 @@ async def open_history_page(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь перешёл на историю одного из аккаунтов
-@router.callback_query(lambda x: x.data.startswith('history_account_'))
+@router.callback_query(F.data.startswith('history_account_'))
 async def open_history_account(callback: CallbackQuery, state: FSMContext):
     account = callback.data[16:]
     dict_history = await history_account_builder(callback.from_user.id, account)
@@ -351,7 +343,7 @@ async def open_history_account(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь ходит по истории заданий одного аккаунта
-@router.callback_query(lambda x: x.data.startswith('history_to_account_page_'))
+@router.callback_query(F.data.startswith('history_to_account_page_'))
 async def open_page_to_history_account(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     page = callback.data[24:]
@@ -362,7 +354,7 @@ async def open_page_to_history_account(callback: CallbackQuery, state: FSMContex
 
 
 # Пользователь решил посмотреть всю историю списком
-@router.callback_query(Text(text=['history_list']))
+@router.callback_query(F.data == 'history_list')
 async def open_history_list(callback: CallbackQuery, state: FSMContext):
     all_task = await db.all_completed_tasks(callback.from_user.id)
     await state.update_data(all_task=all_task)
@@ -371,7 +363,7 @@ async def open_history_list(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь ходит по истории заданий
-@router.callback_query(lambda x: x.data.startswith('history_list_page_'))
+@router.callback_query(F.data.startswith('history_list_page_'))
 async def open_history_list_page(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data[18:])
     data = await state.get_data()
@@ -380,7 +372,7 @@ async def open_history_list_page(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь пополняет свой баланс из личного кабинета
-@router.callback_query(Text(text=['pay', 'pay_from_add_task']))
+@router.callback_query(F.data.in_('pay' 'pay_from_add_task'))
 async def process_start_pay(callback: CallbackQuery, state: FSMContext):
     # Записать функцию, которая будет выдавать курс доллара и по-прошествию дня, добавлять новый курс
     # dollar = func()
@@ -405,7 +397,7 @@ async def process_start_pay(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь делает первое пополнение из добавления задания
-@router.callback_query(Text(text=['first_pay_from_add_task']))
+@router.callback_query(F.data == 'first_pay_from_add_task')
 async def first_pay_from_add_task(callback: CallbackQuery):
     # Записать функцию, которая будет выдавать курс доллара и по-прошествию дня, добавлять новый курс
     # dollar = func()
@@ -417,7 +409,7 @@ async def first_pay_from_add_task(callback: CallbackQuery):
 
 
 # Пользователь делает новое пополнение из добавления аккаунта
-@router.callback_query(Text(text=['pay_from_add_task']))
+@router.callback_query(F.data == 'pay_from_add_task')
 async def pay_pay_from_add_task(callback: CallbackQuery, state: FSMContext):
     # Записать функцию, которая будет выдавать курс доллара и по-прошествию дня, добавлять новый курс
     # dollar = func()
@@ -426,3 +418,15 @@ async def pay_pay_from_add_task(callback: CallbackQuery, state: FSMContext):
     # Пользователь ни разу не пополнял аккаунт (не придумали ещё с Максимом)
     await callback.message.edit_text(payment['main_text'].format(dollar, stb),
                                      reply_markup=await pay_from_add_task_builder())
+
+
+# Пропуск кнопок, которые не должны никак реагировать, чтобы они не грузились
+@router.callback_query(F.data == 'other_apps')
+async def other_answer(callback: CallbackQuery):
+    await callback.answer()
+
+
+# Закрыть сообщение, которое просто надо закрыть
+@router.callback_query(F.data == 'close')
+async def close_message(callback: CallbackQuery):
+    await callback.message.delete()

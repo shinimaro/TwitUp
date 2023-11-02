@@ -1,7 +1,6 @@
 import string
-import time
 
-from bot_apps.databases.database import db
+from databases.database import db
 from bot_apps.wordbank.wordlist import accounts
 
 
