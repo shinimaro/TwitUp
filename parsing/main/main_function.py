@@ -21,8 +21,8 @@ async def main_parser(tasks_msg_id: int) -> dict[str, bool] | None:
     page_list = await driver.pages()
     page_list.extend([await driver.newPage() for _ in range(len(link_dict) - len(page_list))])
     # Запускаем поиск
-    async with asyncio.timeout(35):
-        try:
+    try:
+        async with asyncio.timeout(35):
             # Формируем таски
             tasks = []
             for action in action_dict:
@@ -43,13 +43,13 @@ async def main_parser(tasks_msg_id: int) -> dict[str, bool] | None:
             await gather(*tasks)
             await master.give_driver(driver)
             return action_dict
-        except asyncio.TimeoutError:
-            # Если есть какая-то функция, которая вернула False, то отправим словарь, т.к. мы уже нашли ошибку
-            result = list(filter(lambda x: x is False, action_dict.values()))
-            if result:
-                # Заочно проставляем выполнение остальным действиям, чтобы хендлер сразу нашёл нужную ошибку и не отвлекался на другие действия
-                action_dict = {key: True if value is None else value for key, value in action_dict.items()}
-            else:
-                action_dict = None
-            await master.give_broke_driver(driver)
-            return action_dict
+    except asyncio.TimeoutError:
+        # Если есть какая-то функция, которая вернула False, то отправим словарь, т.к. мы уже нашли ошибку
+        result = list(filter(lambda x: x is False, action_dict.values()))
+        if result:
+            # Заочно проставляем выполнение остальным действиям, чтобы хендлер сразу нашёл нужную ошибку и не отвлекался на другие действия
+            action_dict = {key: True if value is None else value for key, value in action_dict.items()}
+        else:
+            action_dict = None
+        await master.give_broke_driver(driver)
+        return action_dict

@@ -31,14 +31,14 @@ class CommonFilter(BaseFilter):
         if self.personal_messages[user_id]['personal_work_flag']:
             await self.personal_await_completion(user_id)
         self.personal_messages[user_id]['count_messages'] += 1
-        if self.personal_messages[user_id]['count_messages'] >= self.count_personal_messages:
+        if self.personal_messages[user_id]['count_messages'] > self.count_personal_messages:
             await self.personal_limit_filter(user_id)
 
         # Часть с общим фильтром, если бот отправил более 40 сообщений
         if self.work_flag:
             await self.await_completion()
         self.counter += 1
-        if self.counter >= self.count_messages:
+        if self.counter > self.count_messages:
             await self.limit_filter()
         return True
 

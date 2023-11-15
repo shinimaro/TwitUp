@@ -18,7 +18,7 @@ async def correct_account(tg_id: int = None, name: str = None) -> bool | str:
     if len(name[1:]) < 3 or ' ' in name[1:]:
         return accounts['incorrect_account'].format(name[:70])
     # Если аккаунт слишком длинный
-    if len(name[1:]) > 15:
+    if len(name[1:]) > 30:
         return accounts['very_long_account'].format(name[:70])
     # Если в аккаунте запрещённые символы
     for n in name[1:]:

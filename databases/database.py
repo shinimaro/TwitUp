@@ -1,7 +1,5 @@
 import datetime
 import re
-import time
-from typing import Dict, Any
 from typing import TypedDict
 
 import asyncpg
@@ -23,7 +21,6 @@ class WorkersInfo(TypedDict):
     likes: bool
     retweets: bool
     comments: bool
-
 
 
 class Database:
@@ -61,7 +58,6 @@ class Database:
                     await connection.execute('INSERT INTO users(telegram_id, telegram_name) VALUES ($1, $2)', tg_id, tg_name)
                     await connection.execute('INSERT INTO user_notifications(telegram_id) VALUES ($1)', tg_id)
                     await connection.execute('INSERT INTO reviews(telegram_id) VALUES ($1)', tg_id)
-                    await connection.execute("INSERT INTO task_distribution(telegram_id, priority, circular_id) VALUES ($1, 100)", tg_id)
                     # Создаём ему реферальный кабинет и записываем рефовода, если он есть
                     if link:
                         await connection.execute('INSERT INTO referral_office(telegram_id, inviter, date_of_invitation) VALUES ($1, (SELECT telegram_id FROM referral_office WHERE promocode = $2), NOW())', tg_id, link)
@@ -236,7 +232,7 @@ class Database:
             return False
 
     # Функция для отключения всех уведомлений и добавления/удаления из ремайндера
-    async def update_all_notifications(self, tg_id, status, reminder_flag=False):
+    async def update_all_notifications(self, tg_id, status: bool):
         async with self.pool.acquire() as connection:
             async with connection.transaction():
                 await connection.execute('UPDATE user_notifications SET all_notifications = $2 WHERE telegram_id = $1;', tg_id, status)
@@ -248,7 +244,7 @@ class Database:
                 else:
                     await connection.execute('INSERT INTO reminder_steps (telegram_id) VALUES ($1) ON CONFLICT (telegram_id) DO NOTHING;', tg_id)
 
-    # Самостоятельное отключение приёма задания
+    # Самостоятельное отключение/включение приёма задания
     async def change_all_notifications(self, tg_id, change=False):
         async with self.pool.acquire() as connection:
             check = await connection.fetchrow('SELECT all_notifications FROM user_notifications WHERE telegram_id = $1', tg_id)
@@ -259,8 +255,19 @@ class Database:
             # Если его флаг был включён, но мы ему отрубили приём заданий, то включаем их обратно
             if change:
                 check_flag = await connection.fetchrow('SELECT notifications_flag FROM user_notifications WHERE telegram_id = $1', tg_id)
-                if check_flag and check_flag['notifications_flag'] and not check_notifications:
+                if check_flag['notifications_flag'] and not check_notifications:
                     await connection.execute('UPDATE user_notifications SET all_notifications = True WHERE telegram_id = $1', tg_id)
+
+    # Самостоятельный обруб кнопки
+    async def turn_off_receiving_tasks(self, tg_id):
+        async with self.pool.acquire() as connection:
+            check = await connection.fetchrow('SELECT all_notifications FROM user_notifications WHERE telegram_id = $1', tg_id)
+            # Если у пользователя было включено получение заданий
+            if check['all_notifications']:
+                await self.update_all_notifications(tg_id, False)
+                return True
+            return False
+
 
     # Функция для проверки того, нужно ли отключать приём заданий. Возвращает либо True - всё ок, либо текст того, какая проблема
     async def off_all_notifications(self, tg_id) -> dict | bool:
@@ -696,11 +703,19 @@ class Database:
                         task_info_dict['type_task'].append(task['type_task'])
                 return task_info_dict
 
-    # Получить лимит выполнений на задание
+    # Получить лимит выполнений на задания
     async def get_task_limit(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
             result = await connection.fetchrow('SELECT available_accounts FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
             return result['available_accounts']
+
+    # Проверка на то, сколько у пользователя осталось выполнений
+    async def get_task_actual_limit(self, tasks_msg_id):
+        async with self.pool.acquire() as connection:
+            executions_limit = await connection.fetchrow('SELECT available_accounts FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
+            executions = await connection.fetchrow("SELECT COUNT(*) FROM completed_tasks WHERE task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1) AND telegram_id = (SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1)", tasks_msg_id)
+            return max(executions_limit['available_accounts'] - executions['count'], 0)
+
 
     # Функция для вытаскивания id поста и username твиттер профиля
     async def get_link_action(self, tasks_msg_id):
@@ -746,6 +761,23 @@ class Database:
                 await connection.execute('UPDATE tasks_messages SET message_id = $2 WHERE tasks_msg_id = $1', tasks_msg_id, message_id)
                 failure_key = await connection.fetchval("INSERT INTO failure_statistics(tasks_msg_id) VALUES ($1) RETURNING failure_key", tasks_msg_id)
                 await connection.execute("INSERT INTO statistics(tasks_msg_id, offer_time, failure_key) VALUES ($1, now(), $2)", tasks_msg_id, failure_key)
+                # Обновление счётчика отправленных заданий
+                tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
+                await self.update_counter_execute(tg_id)
+
+    # Добавить в счётчик тасков новый таск
+    async def update_counter_execute(self, tg_id):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE tasks_distribution SET task_sent_today = task_sent_today + 1 WHERE telegram_id = $1', tg_id)
+
+    # Убрать с счётчика задание, если оно простояло менее 30 минут
+    async def decrease_counter_execute(self, tasks_msg_id):
+        async with self.pool.acquire() as connection:
+            check_time = await connection.fetchrow("SELECT * FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE deleted_time - offer_time >= INTERVAL '20 minutes' AND tasks_msg_id = $1", tasks_msg_id)
+            tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
+            # Если таск пролежал менее 20 минут
+            if not check_time:
+                await connection.execute('UPDATE tasks_distribution SET task_sent_today = task_sent_today - 1 WHERE telegram_id = $1', tg_id)
 
 
     # Добавить статус и время процесса выполнения задания
@@ -775,13 +807,12 @@ class Database:
     # Получить количество выполненных заданий
     async def get_all_completed_and_price(self, task_id):
         async with self.pool.acquire() as connection:
-            async with connection.transaction():
-                # completed = await connection.fetchrow('SELECT executions - (SELECT COUNT(*) FROM completed_tasks WHERE task_id = $1) as count_complete FROM tasks WHERE task_id = $1', task_id)
-                price = await connection.fetchrow('SELECT price FROM tasks WHERE task_id = $1', task_id)
-                executions = await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = $1', task_id)
-                # completed = round(completed.get('count_complete', 0) / 5) * 5
-                # return {'count_complete': completed, 'price': price['price'] / 100 * (100 - config.task_price.commission_percent)}
-                return {'count_complete': round(executions['executions'] / 5) * 5, 'price': price['price'] if price["price"].is_integer() else round(price["price"], 2)}
+            # completed = await connection.fetchrow('SELECT executions - (SELECT COUNT(*) FROM completed_tasks WHERE task_id = $1) as count_complete FROM tasks WHERE task_id = $1', task_id)
+            price = await connection.fetchrow('SELECT price FROM tasks WHERE task_id = $1', task_id)
+            executions = await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = $1', task_id)
+            # completed = round(completed.get('count_complete', 0) / 5) * 5
+            # return {'count_complete': completed, 'price': price['price'] / 100 * (100 - config.task_price.commission_percent)}
+            return {'count_complete': round(executions['executions'] / 5) * 5, 'price': price['price'] if price["price"].is_integer() else round(price["price"], 2)}
 
     # Получить message_id высланного задания
     async def get_task_message_id(self, tasks_msg_id):
@@ -829,7 +860,7 @@ class Database:
     async def task_completed(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
             async with connection.transaction():
-                tg_id = await connection.fetchrow('SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
+                tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
                 # Обновления время завершения задания и статуса на "выполненный"
                 await connection.execute("UPDATE statistics SET finish_time = (now()) WHERE tasks_msg_id = $1", tasks_msg_id)
                 await connection.execute("UPDATE tasks_messages SET status = 'completed' WHERE tasks_msg_id = $1", tasks_msg_id)
@@ -838,7 +869,7 @@ class Database:
                 # Находим то, сколько перевести пользователю
                 reward = await connection.fetchrow('SELECT price FROM tasks WHERE task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1)', tasks_msg_id)
                 # Выплата всех штрафов юзера
-                reward = await self.payment_of_fines(reward['price'], tg_id['telegram_id'])
+                reward = await self.payment_of_fines(reward['price'], tg_id)
                 # Добавление таска в сделанные (completed_tasks)
                 await connection.execute('INSERT INTO completed_tasks(telegram_id, task_id, account_name, tasks_msg_id, final_reward, date_of_completion) SELECT telegram_id, task_id, account_name, $1, $2, (SELECT finish_time FROM statistics WHERE tasks_msg_id = $1) FROM tasks_messages WHERE tasks_msg_id = $1;', tasks_msg_id, reward)
                 # Перевод заработанного на баланс аккаунта, с которого было выполнено задание
@@ -846,18 +877,18 @@ class Database:
                 # Перевод заработанного рефоводу
                 await connection.execute('UPDATE referral_office SET current_balance = current_balance + $1 WHERE telegram_id = (SELECT inviter FROM referral_office WHERE telegram_id = (SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $2))', reward / 100.0 * 1.5, tasks_msg_id)
                 # Узнать таск id
-                task_id = await connection.execute('SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
+                task_id = await connection.fetchrow('SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
                 # Повышение приоритета пользователя
-                await self.change_priority_completing_task(tg_id['telegram_id'], task_id['task_id'])
+                await self.change_priority_completing_task(tg_id, task_id['task_id'])
                 # Изменение его круга, если это необходимо
-                await self.change_in_circle(tg_id['telegram_id'])
+                await self.change_in_circle(tg_id)
                 # Вернуть итоговое кол-во наград, которое он получил
                 return int(reward) if reward.is_integer() else round(reward, 2)
 
     # Выплата штрафов юзера
     async def payment_of_fines(self, reward, tg_id):
         async with self.pool.acquire() as connection:
-            fines_to_reward = await connection.fetch("SELECT fines_id, awards_cut, remaining_to_redeem, already_bought, victim_user FROM fines INNER JOIN bought USING(fines_id) WHERE fines_type = 'bought' AND telegram_id = $1 AND remaining_to_redeem <= already_bought", tg_id['telegram_id'])
+            fines_to_reward = await connection.fetch("SELECT fines_id, awards_cut, remaining_to_redeem, already_bought, victim_user FROM fines INNER JOIN bought USING(fines_id) WHERE fines_type = 'bought' AND telegram_id = $1 AND remaining_to_redeem <= already_bought", tg_id)
             if fines_to_reward:
                 available_reward = reward / 100 * fines_to_reward[0]['victim_user']
                 reward -= available_reward
@@ -896,7 +927,7 @@ class Database:
                 reward = await connection.fetchrow('SELECT final_reward FROM completed_tasks WHERE tasks_msg_id = $1', tasks_msg_id)
                 account_balance = await connection.fetchrow('SELECT account_balance FROM accounts WHERE account_name IN (SELECT account_name FROM completed_tasks WHERE tasks_msg_id = $1)', tasks_msg_id)
                 # Если пользователь не снимал пока STB или баланса хватает, чтобы снять с аккаунта награду и перевести её на баланс
-                if account_balance['account_balance'] >= reward['final_reward']:
+                if account_balance and account_balance['account_balance'] >= reward['final_reward']:
                     # Сбор наград с аккаунта, которому были выделены награды
                     await connection.execute('UPDATE users SET balance = balance + (SELECT final_reward FROM completed_tasks WHERE tasks_msg_id = $2) WHERE telegram_id = $1', tg_id, tasks_msg_id)
                     await connection.execute('UPDATE accounts SET account_balance = account_balance - (SELECT final_reward FROM completed_tasks WHERE tasks_msg_id = $1) WHERE account_balance >= (SELECT final_reward FROM completed_tasks WHERE tasks_msg_id = $1) AND account_name = (SELECT account_name FROM completed_tasks WHERE tasks_msg_id = $1)', tasks_msg_id)
@@ -920,53 +951,39 @@ class Database:
                     return True
                 return False
 
-
-
-
-    # +
     # Функция, добавляющая время удаления сообщения, а также статус и снижение актива
-    async def del_and_change_status_task(self, tasks_msg_id):
+    async def del_and_change_status_task(self, tasks_msg_id, no_first_execution=False):
         async with self.pool.acquire() as connection:
             async with connection.transaction():
-                tg_id = await connection.fetchrow("SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1")
                 # Если пользователь отказался от задания, то проверяем, поздно он это сделал или нет
-                time_add_task = await connection.fetchrow('SELECT start_time FROM statistics WHERE tasks_msg_id = $1', tasks_msg_id)
-                moscow_timezone = pytz.timezone('Europe/Moscow')
-                correct_datetime = time_add_task['start_time'].astimezone(moscow_timezone)
-                current_date_moscow = datetime.datetime.now(tz=moscow_timezone)
-                time_difference = current_date_moscow - correct_datetime
+                time_difference = await self.get_time_difference_for_refuse_task(tasks_msg_id)
+                tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
                 priority_change = await self.get_priority_change()
-                # Если пользователь отказался от задания
-                if time_difference.total_seconds() < 2 * 60:
-                    await connection.execute("UPDATE tasks_messages SET status = 'refuse' WHERE tasks_msg_id = $1", tasks_msg_id)
-                    await connection.execute("UPDATE tasks_distribution SET priority = priority + $2 WHERE telegram_id = $3", tasks_msg_id, priority_change['refuse'], tg_id['telegram_id'])
-                # Если пользователь поздно отказался от задания
-                else:
-                    await connection.execute("UPDATE tasks_messages SET status = 'refuse_late' WHERE tasks_msg_id = $1", tasks_msg_id)
-                    await connection.execute("UPDATE tasks_distribution SET priority = priority + $2 WHERE telegram_id = $3", tasks_msg_id, priority_change['refuse_late'], tg_id['telegram_id'])
-                await connection.execute("UPDATE statistics SET deleted_time = now() WHERE tasks_msg_id = $1", tasks_msg_id)
-                await self.change_in_circle(tg_id['telegram_id'])
-    # +
-    # Функция, добавляющая время удаления сообщения и статус, но в том случае, когда пользователь уже выполнил задание и хочет сделать его по новой
-    async def del_and_change_status_task_2(self, tasks_msg_id):
-        async with self.pool.acquire() as connection:
-            async with connection.transaction():
-                time_add_task = await connection.fetchrow('SELECT start_time FROM statistics WHERE tasks_msg_id = $1', tasks_msg_id)
-                moscow_timezone = pytz.timezone('Europe/Moscow')
-                correct_datetime = time_add_task['start_time'].astimezone(moscow_timezone)
-                current_date_moscow = datetime.datetime.now(tz=moscow_timezone)
-                time_difference = current_date_moscow - correct_datetime
-                # Если пользователь заблаговременно отказался от задания, то ничего не делаем
-                if time_difference.total_seconds() < 2 * 60:
+                # Если пользователь выполняет таск не в первый раз и заблаговременно его отменил, убираем сообщение о таске
+                if no_first_execution and time_difference.total_seconds() < 1 * 60:
                     await connection.execute('DELETE FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
-                # Если пользователь в итоге отказался от задания
-                elif time_difference.total_seconds() < 5 * 60:
+                    return
+                # Если пользователь незаблогавременно отказался от задания при его первом выполнении или при повторном выполнении через 5 минут
+                elif time_difference.total_seconds() < 2 * 60 or (no_first_execution and time_difference.total_seconds() < 5 * 60):
+                    finally_priority = await self.min_priority(tg_id, priority_change['refuse'])
                     await connection.execute("UPDATE tasks_messages SET status = 'refuse' WHERE tasks_msg_id = $1", tasks_msg_id)
-                # Если пользователь поздно отказался от задания
+                # Если пользователь слишком поздно отказался от задания
                 else:
+                    finally_priority = await self.min_priority(tg_id, priority_change['refuse_late'])
                     await connection.execute("UPDATE tasks_messages SET status = 'refuse_late' WHERE tasks_msg_id = $1", tasks_msg_id)
-
+                await connection.execute("UPDATE tasks_distribution SET priority = $2 WHERE telegram_id = $1", tg_id, finally_priority)
                 await connection.execute("UPDATE statistics SET deleted_time = now() WHERE tasks_msg_id = $1", tasks_msg_id)
+                await self.change_in_circle(tg_id)
+
+    async def get_time_difference_for_refuse_task(self, tasks_msg_id):
+        async with self.pool.acquire() as connection:
+            time_add_task = await connection.fetchrow('SELECT start_time FROM statistics WHERE tasks_msg_id = $1', tasks_msg_id)
+            moscow_timezone = pytz.timezone('Europe/Moscow')
+            correct_datetime = time_add_task['start_time'].astimezone(moscow_timezone)
+            current_date_moscow = datetime.datetime.now(tz=moscow_timezone)
+            return current_date_moscow - correct_datetime
+
+
 
     # Обновить message_id от аккаунта
     async def change_task_message_id(self, tasks_msg_id, message_id):
@@ -1054,9 +1071,7 @@ class Database:
             # return False
             # Если задание не было ещё завершено
             if not await connection.fetchrow("SELECT task_id FROM tasks WHERE status = 'completed' AND task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1)", tasks_msg_id):
-                limit = await self.get_task_limit(tasks_msg_id)
-                executions = await connection.fetchrow("SELECT COUNT(*) FROM tasks_messages WHERE task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1) AND telegram_id = (SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1) AND status = 'completed'", tasks_msg_id)
-                if executions < limit:
+                if await self.get_task_actual_limit(tasks_msg_id) > 0:
                     return True
             return False
 
@@ -1072,7 +1087,7 @@ class Database:
     async def new_tasks_messages(self, tg_id, tasks_msg_id):
         async with self.pool.acquire() as connection:
             async with connection.transaction():
-                result = await connection.fetchval("INSERT INTO tasks_messages(message_id, telegram_id, task_id, status) VALUES ((SELECT message_id FROM tasks_messages WHERE tasks_msg_id = $2), $1, (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $2), 'start_task') RETURNING tasks_msg_id", tg_id, tasks_msg_id)
+                result = await connection.fetchval("INSERT INTO tasks_messages(message_id, task_id, available_accounts, telegram_id, status) VALUES ((SELECT message_id FROM tasks_messages WHERE tasks_msg_id = $2), (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $2), (SELECT available_accounts FROM tasks_messages WHERE tasks_msg_id = $2), $1, 'start_task') RETURNING tasks_msg_id", tg_id, tasks_msg_id)
                 failure_key = await connection.fetchval('INSERT INTO failure_statistics(tasks_msg_id) VALUES ($1) RETURNING failure_key', result)
                 await connection.execute('INSERT INTO statistics(tasks_msg_id, start_time, failure_key) VALUES ($1, now(), $2)', result, failure_key)
                 return result
@@ -1101,7 +1116,6 @@ class Database:
         async with self.pool.acquire() as connection:
             await connection.execute('INSERT INTO tasks_refusals(task_id, tasks_msg_id, passed_after_start, execution_stage) VALUES ((SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1), $1, (SELECT NOW() - start_time FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE tasks_msg_id = $1), (SELECT COUNT(*) FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE telegram_id = (SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1) AND task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1)))', tasks_msg_id)
 
-
     # Функция, меняющая статус задания на удалённый
     async def add_deleted_status(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
@@ -1110,8 +1124,7 @@ class Database:
     # Запись в базу даных о скрытии таска
     async def add_note_about_hiding(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
-            await connection.execute('INSERT INTO tasks_hiding(task_id, tasks_msg_id) VALUES ((SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1), $1)')
-
+            await connection.execute('INSERT INTO tasks_hiding(task_id, tasks_msg_id) VALUES ((SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1), $1)', tasks_msg_id)
 
     # Функция, которая достаёт все message_id и статусы всех заданий, которые находятся в процессе предложения или выполнения
     async def info_for_delete_messages(self, tasks_msg_id):
@@ -1138,7 +1151,10 @@ class Database:
                 await connection.execute("UPDATE tasks_messages SET status = 'scored' WHERE tasks_msg_id = $1", tasks_msg_id)
                 await connection.execute("UPDATE statistics SET deleted_time = now() WHERE tasks_msg_id = $1", tasks_msg_id)
                 change_priority = await self.get_priority_change()
-                await connection.execute("UPDATE tasks_distribution SET priority = priority + $2 WHERE telegram_id = (SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1)", tasks_msg_id, change_priority['scored_on_task'])
+                tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
+                finally_priority = await self.min_priority(tg_id, change_priority['scored_on_task'])
+                await connection.execute("UPDATE tasks_distribution SET priority = $2 WHERE telegram_id = $1", tg_id, finally_priority)
+                await self.change_in_circle(tg_id)
 
     # Обновление статуса задания на "другие люди успели завершить задание раньше"
     async def update_status_on_fully_completed(self, tasks_msg_id):
@@ -1151,18 +1167,22 @@ class Database:
     async def change_priority_not_completed_task(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
             status = await connection.execute('SELECT status FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
+            tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
+            change_priority = await self.get_priority_change()
             # Если воркер даже не начинал заадние
             if status['status'] == 'offer_more':
-                await connection.execute('UPDATE tasks_distribution SET priority = priority + 3 WHERE telegram_id = (SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1)', tasks_msg_id)
+                finally_priority = await self.max_priority(tg_id, 3)
             # Если воркер делал задание в этот момент
             else:
-                change_priority = await self.get_priority_change()
-                await connection.execute('UPDATE tasks_distribution SET priority = priority + $2 WHERE telegram_id = (SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1)', tasks_msg_id, change_priority['complete_others'])
+                finally_priority = await self.max_priority(tg_id, change_priority['complete_others'])
+            await connection.execute('UPDATE tasks_distribution SET priority = $2 WHERE telegram_id = $1', tg_id, finally_priority)
+            await self.change_in_circle(tg_id)
 
     # Понижение рейтинга в зависимости от того, как долго пользователь игнорировал задание
     async def change_priority_ignore_task(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
             offer_time = await connection.fetchrow('SELECT offer_time FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE tasks_msg_id = $1', tasks_msg_id)
+            offer_time = offer_time['offer_time'].astimezone(pytz.timezone('Europe/Moscow'))
             now_time = datetime.datetime.now(pytz.timezone('Europe/Moscow'))
             now_time_only = now_time.hour * 60 + now_time.minute
             offer_time_only = offer_time.hour * 60 + offer_time.minute
@@ -1178,7 +1198,10 @@ class Database:
             # Если пользователь игнорил таск от 20 до 40 минут
             elif 20 <= time_difference <= 40:
                 change_priority = -1
-            await connection.execute('UPDATE tasks_distribution SET priority = priority + $2 WHERE telegram_id = (SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1)', tasks_msg_id, change_priority)
+            tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
+            finally_priority = await self.min_priority(tg_id, change_priority)
+            await connection.execute('UPDATE tasks_distribution SET priority = $2 WHERE telegram_id = $1', tg_id, finally_priority)
+            await self.change_in_circle(tg_id)
 
 
     # Добавить время удаления (сбора награды) для завершённых заданий
@@ -1230,6 +1253,7 @@ class Database:
                     # Заполнение лайка и ретвита
                     else:
                         await connection.execute('INSERT INTO actions(task_id, type_task, link_action) VALUES ($1, $2, $3)', task_id, task, accepted['post_link'])
+                return task_id
 
     # Получить telegram_id создателя таска
     async def get_id_founder_task(self, tasks_msg_id):
@@ -1310,23 +1334,18 @@ class Database:
     # Достать словарь с лимитами на приоритет
     async def get_limits_priority_dict(self):
         async with self.pool.acquire() as connection:
-            limits = await connection.fetchrow('SELECT vacationers, prelim, main, challenger, champion FROM limits_pryority ORDER BY date_of_added, limits_pryority_id DESC LIMIT 1')
+            limits = await connection.fetchrow('SELECT vacationers, prelim, main, challenger, champion FROM limits_priority ORDER BY date_of_added, limits_priority_id DESC LIMIT 1')
             return {level: limit for level, limit in limits.items()}
 
+    # Достать словарь с измененияим приоритета
     async def get_priority_change(self):
         async with self.pool.acquire() as connection:
             priority_change = await connection.fetchrow('SELECT completing_task, re_execution, max_re_execution, complete_others, refuse, refuse_late, hiding_task, number_hiding, scored_on_task FROM priority_change ORDER BY date_of_added, priority_change_id DESC')
             return {type_action: change for type_action, change in priority_change.items()}
 
-
     # Вытаскивание всех пользователей для задания и проверка некоторых деталей
     async def get_all_workers(self, task_id):
         async with self.pool.acquire() as connection:
-            actions = await connection.fetch('SELECT type_task FROM actions WHERE task_id = $1', task_id)
-            limits = await connection.fetchrow('SELECT vacationers, prelim, main, challenger, champion FROM limits_tasks ORDER BY date_of_added, limits_id DESC LIMIT 1')
-            actions_tuple = tuple(action['type_task'] for action in actions)
-            limits_dict = await self.get_limits_dict()
-            limits_executions_dict = await self.get_limits_executions_dict()
             # Сколько максимум можно оставить тасков без реакции
             max_tasks_in_interval = 2
             # Запрос, который отбирает всех воркеров по условиям
@@ -1335,29 +1354,57 @@ class Database:
             # 3. Это не новичок
             # 4. У него уже не висит 3 задания, к которым он даже не приторнуля, ну и вроде всё, может ещё какие-то условия, хз
             all_workers_info: list[WorkersInfo] = await connection.fetch('''SELECT telegram_id, level, priority, COUNT(account_name) as available_accounts, tasks_sent_today, subscriptions, likes, retweets, comments FROM (SELECT user_notifications.telegram_id, level, priority, accounts.account_name, COUNT(CASE WHEN statistics.offer_time >= date_trunc('day', current_timestamp AT TIME ZONE 'Europe/Moscow') THEN 1 END) as tasks_sent_today, subscriptions, likes, retweets, comments FROM user_notifications JOIN tasks_distribution USING(telegram_id) LEFT JOIN tasks_messages USING(telegram_id) LEFT JOIN statistics USING(tasks_msg_id) RIGHT JOIN accounts ON user_notifications.telegram_id = accounts.telegram_id WHERE user_notifications.telegram_id IN (SELECT telegram_id FROM users JOIN user_notifications USING(telegram_id) JOIN tasks_distribution USING(telegram_id) WHERE telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) AND user_notifications.all_notifications = True AND tasks_distribution.booking = False) AND accounts.account_name IN (SELECT account_name FROM accounts WHERE account_name NOT IN (SELECT completed_tasks.account_name FROM actions JOIN tasks USING(task_id) JOIN completed_tasks USING(task_id) WHERE (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND account_name NOT IN (SELECT account_name FROM actions JOIN tasks_messages USING(task_id) WHERE tasks_messages.status IN ('process', 'сhecking', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments') AND (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND accounts.deleted <> True AND accounts.account_status <> 'inactive') AND user_notifications.telegram_id NOT IN (SELECT telegram_id FROM actions FULL OUTER JOIN tasks_messages USING(task_id) WHERE task_id = $1 AND (telegram_id, link_action, type_task) IN (SELECT telegram_id, link_action, type_task FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN actions USING(task_id) WHERE tasks_messages.status NOT IN ('completed', 'refuse', 'refuse_late', 'scored', 'fully_completed', 'deleted')) GROUP BY telegram_id) AND EXISTS (SELECT 1 FROM tasks_messages WHERE tasks_messages.telegram_id = user_notifications.telegram_id LIMIT 1) GROUP BY accounts.telegram_id, user_notifications.telegram_id, level, priority, accounts.account_name, subscriptions, likes, retweets, comments HAVING COUNT(CASE WHEN tasks_messages.status IN ('offer') THEN 1 END) <= $2) as tg_common GROUP BY telegram_id, level, priority, tasks_sent_today, subscriptions, likes, retweets, comments HAVING COUNT(account_name) > 0;''', task_id, max_tasks_in_interval)
-            ready_workers_dict: dict[int, dict[str, int]] = {}
-            for info in all_workers_info:
-                # Проверка на то, что не превышен лимит на сегодня
-                if limits_dict[info['level']] > info['tasks_sent_today']:
-                    # Проверка на то, что у пользователя включено получение данного вида заданий (лайков, ретвитов)
-                    for action in actions_tuple:
-                        if action in info and not info[action]:
-                            break
+            return await self._get_ready_workers_dict(task_id, all_workers_info)
+
+    # Получить всех воркеров, для какого-то раунда
+    async def get_all_workers_for_round(self, task_id):
+        async with self.pool.acquire() as connection:
+            # all_workers_info: list[WorkersInfo] = await connection.fetch('''SELECT telegram_id, level, priority, COUNT(account_name) as available_accounts, tasks_sent_today, subscriptions, likes, retweets, comments FROM (SELECT user_notifications.telegram_id, level, priority, accounts.account_name, COUNT(CASE WHEN statistics.offer_time >= date_trunc('day', current_timestamp AT TIME ZONE 'Europe/Moscow') THEN 1 END) as tasks_sent_today, subscriptions, likes, retweets, comments FROM user_notifications JOIN tasks_distribution USING(telegram_id) LEFT JOIN tasks_messages USING(telegram_id) LEFT JOIN statistics USING(tasks_msg_id) RIGHT JOIN accounts ON user_notifications.telegram_id = accounts.telegram_id WHERE user_notifications.telegram_id IN (SELECT telegram_id FROM users JOIN user_notifications USING(telegram_id) JOIN tasks_distribution USING(telegram_id) WHERE telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) AND user_notifications.all_notifications = True AND tasks_distribution.booking = False) AND accounts.account_name IN (SELECT account_name FROM accounts WHERE account_name NOT IN (SELECT completed_tasks.account_name FROM actions JOIN tasks USING(task_id) JOIN completed_tasks USING(task_id) WHERE (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND account_name NOT IN (SELECT account_name FROM actions JOIN tasks_messages USING(task_id) WHERE tasks_messages.status IN ('process', 'сhecking', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments') AND (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND accounts.deleted <> True AND accounts.account_status <> 'inactive') AND user_notifications.telegram_id NOT IN (SELECT telegram_id FROM actions FULL OUTER JOIN tasks_messages USING(task_id) WHERE task_id = $1 AND (telegram_id, link_action, type_task) IN (SELECT telegram_id, link_action, type_task FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN actions USING(task_id) WHERE tasks_messages.status NOT IN ('completed', 'refuse', 'refuse_late', 'scored', 'fully_completed', 'deleted')) GROUP BY telegram_id) AND EXISTS (SELECT 1 FROM tasks_messages WHERE tasks_messages.telegram_id = user_notifications.telegram_id LIMIT 1) GROUP BY accounts.telegram_id, user_notifications.telegram_id, level, priority, accounts.account_name, subscriptions, likes, retweets, comments HAVING COUNT(CASE WHEN tasks_messages.status IN ('offer') THEN 1 END) <= $2) as tg_common GROUP BY telegram_id, level, priority, tasks_sent_today, subscriptions, likes, retweets, comments HAVING COUNT(account_name) > 0;''', task_id, max_tasks_in_interval)
+
+            # В отличии от запроса выше, тут
+            # Убрано условие, чтобы не лежало много тасков
+            # Добавлено поле с инфо о круге юзера
+            # Если юзер уже как-то контактировал с данным таском, он не отбирается
+            all_workers_info: list[WorkersInfo] = await connection.fetch('''SELECT telegram_id, circular_round, level, priority, COUNT(account_name) as available_accounts, tasks_sent_today, subscriptions, likes, retweets, comments FROM (SELECT user_notifications.telegram_id, circular_round, level, priority, accounts.account_name, COUNT(CASE WHEN statistics.offer_time >= date_trunc('day', current_timestamp AT TIME ZONE 'Europe/Moscow') THEN 1 END) as tasks_sent_today, subscriptions, likes, retweets, comments FROM user_notifications JOIN tasks_distribution USING(telegram_id) LEFT JOIN tasks_messages USING(telegram_id) LEFT JOIN statistics USING(tasks_msg_id) RIGHT JOIN accounts ON user_notifications.telegram_id = accounts.telegram_id WHERE user_notifications.telegram_id IN (SELECT telegram_id FROM users JOIN user_notifications USING(telegram_id) JOIN tasks_distribution USING(telegram_id) WHERE telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) AND user_notifications.all_notifications = True AND tasks_distribution.booking = False) AND accounts.account_name IN (SELECT account_name FROM accounts WHERE account_name NOT IN (SELECT completed_tasks.account_name FROM actions JOIN tasks USING(task_id) JOIN completed_tasks USING(task_id) WHERE (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND account_name NOT IN (SELECT account_name FROM actions JOIN tasks_messages USING(task_id) WHERE tasks_messages.status IN ('process', 'сhecking', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments') AND (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND accounts.deleted <> True AND accounts.account_status <> 'inactive') AND user_notifications.telegram_id NOT IN (SELECT telegram_id FROM actions FULL OUTER JOIN tasks_messages USING(task_id) WHERE task_id = $1 AND (telegram_id, link_action, type_task) IN (SELECT telegram_id, link_action, type_task FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN actions USING(task_id)) GROUP BY telegram_id) AND EXISTS (SELECT 1 FROM tasks_messages WHERE tasks_messages.telegram_id = user_notifications.telegram_id LIMIT 1) GROUP BY accounts.telegram_id, circular_round, user_notifications.telegram_id, level, priority, accounts.account_name, subscriptions, likes, retweets, comments) as tg_common GROUP BY telegram_id, circular_round, level, priority, tasks_sent_today, subscriptions, likes, retweets, comments HAVING COUNT(account_name) > 0;''', task_id)
+            return self._get_ready_workers_dict(task_id, all_workers_info, circular_round=True)
+
+    # Отбор воркеров, у которых нет лимитов на задания
+    async def _get_ready_workers_dict(self, task_id, all_workers_info: list[WorkersInfo], circular_round=False):
+        actions_tuple = await self.get_actions_tuple(task_id)
+        limits_dict = await self.get_limits_dict()
+        limits_executions_dict = await self.get_limits_executions_dict()
+        ready_workers_dict: dict[int, dict[str, int]] = {} if not circular_round else {'1': {}, '2': {}, '3': {}}
+        for info in all_workers_info:
+            # Проверка на то, что не превышен лимит на сегодня
+            if limits_dict[info['level']] > info['tasks_sent_today']:
+                # Проверка на то, что у пользователя включено получение данного вида заданий (лайков, ретвитов)
+                for action in actions_tuple:
+                    if action in info and not info[action]:
+                        break
+                else:
+                    # Если у пользователя больше аккаунтов, чем нужно, записываем максимум, доступный ему:
+                    if not circular_round:
+                        ready_workers_dict[info['telegram_id']] = {'priority': info['priority'], 'available_accounts':  min(info['available_accounts'], limits_executions_dict[info['level']])}
                     else:
-                        # Если у пользователя больше аккаунтов, чем нужно, записываем максимум, доступный ему
-                        ready_workers_dict[info['telegram_id']] = {'priority': info['priority'], 'available_accounts': info['available_accounts'] if info['available_accounts'] <= limits_executions_dict[info['level']] else limits_executions_dict[info['level']]}
-            return ready_workers_dict
+                        ready_workers_dict[info['circular_round']][info['telegram_id']] = {'priority': info['priority'], 'available_accounts':  min(info['available_accounts'], limits_executions_dict[info['level']])}
+                    return ready_workers_dict
+
+    async def get_actions_tuple(self, task_id):
+        async with self.pool.acquire() as connection:
+            actions = await connection.fetch('SELECT type_task FROM actions WHERE task_id = $1', task_id)
+            return tuple(action['type_task'] for action in actions)
+
 
     # Отбоор новичков
-    async def get_some_beginners(self):
+    async def get_some_beginners(self, task_id):
         async with self.pool.acquire() as connection:
             # Достаём новичков, применяя минимальную проверку (на бан, на то что им сейчас не отправляется другой таск)
-            beginners = await connection.fetch('SELECT users.telegram_id, COUNT(account_name) as count_accounts FROM users JOIN user_notifications USING(telegram_id) RIGHT JOIN accounts ON users.telegram_id = accounts.telegram_id WHERE NOT EXISTS (SELECT 1 FROM tasks_messages t WHERE t.telegram_id = users.telegram_id LIMIT 1) AND users.telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND users.telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND user_notifications.all_notifications = True GROUP BY 1, adding_time ORDER BY accounts.adding_time ASC')
-            beginner_limit = await self.get_limits_executions_dict()['beginner']
+            beginners = await connection.fetch('SELECT users.telegram_id, account_name FROM users JOIN user_notifications USING(telegram_id) RIGHT JOIN accounts ON users.telegram_id = accounts.telegram_id WHERE NOT EXISTS (SELECT 1 FROM tasks_messages t WHERE t.telegram_id = users.telegram_id LIMIT 1) AND users.telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) AND users.telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND users.telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND user_notifications.all_notifications = True ORDER BY accounts.adding_time ASC', task_id)
+            beginner_limit = await self.get_limits_executions_dict()
             beginners_dict = {}
             for beginner in beginners:
-                if beginners['telegram_id'] not in beginners_dict:
-                    beginners_dict[beginners['telegram_id']] = beginner['count_accounts'] if beginner['count_accounts'] <= beginner_limit else beginner_limit
+                beginners_dict.setdefault(beginner['telegram_id'], 0)
+                beginners_dict[beginner['telegram_id']] += 1 if beginners_dict[beginner['telegram_id']] < beginner_limit['beginner'] else 0
             return beginners_dict
 
     # Получить количество выполнений для завершения таска
@@ -1375,7 +1422,6 @@ class Database:
     async def worker_unbooking(self, workers: list[int]):
         async with self.pool.acquire() as connection:
             await connection.execute('UPDATE tasks_distribution SET booking = False WHERE telegram_id = ANY($1)', workers)
-
 
     # Достаёт информацию о об отправленных заданиях
     async def get_sent_tasks(self, task_id):
@@ -1403,7 +1449,7 @@ class Database:
             return statistics_dict
 
     # Функция для нахождения коэфициента принятия заданий за последние дни
-    async def get_accepted_tasks(self, task_id):
+    async def get_accepted_tasks(self):
         async with self.pool.acquire() as connection:
             result = await connection.fetch("SELECT task_id, telegram_id, COUNT(offer_time) as number_executions FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE offer_time >= NOW() - INTERVAL '4 days' AND start_time IS NOT NULL GROUP BY task_id, telegram_id")
             finally_executions_dict = {}
@@ -1414,10 +1460,13 @@ class Database:
     # Выдача новичкам среднего приоритета и уровня
     async def definition_of_beginners(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
-            check = await connection.fetchrow('SELECT COUNT(*) FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
-            if not check or check['count'] <= 1:
-                await connection.execute("UPDATE tasks_distribution SET priority = 50, level = 'main' WHERE telegram_id = (SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1)", tasks_msg_id)
-
+            tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
+            check_task = await connection.fetchrow('SELECT COUNT(*) FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
+            check_availability = await connection.fetchrow('SELECT telegram_id FROM tasks_distribution WHERE telegram_id = $1', tg_id)
+            # Хз, зачем почти две одинаковых проверки,но пусть будет
+            if check_task and not check_availability:
+                limits_dict = await self.get_limits_dict()
+                await connection.execute("INSERT INTO tasks_distribution(telegram_id, priority, level, circular_round, task_sent_today) VALUES ($1, 50, 'main', 1, $2)", tg_id, limits_dict['main'])
 
     # Достаёт максимальный и минимальный приоритет, который можно выдать воркеру
     async def get_user_limits(self, tg_id):
@@ -1425,54 +1474,64 @@ class Database:
             level = await connection.fetchrow('SELECT level FROM tasks_distribution WHERE telegram_id = $1', tg_id)
             level = level['level']
             limits = await self.get_limits_priority_dict()
-            limits_dict = {'max_limit': limits[level],
-                           'min_limit': max([value for value in limits.values() if value < limits[level]], default=0)}
+            limits_dict = {'max_limits': limits[level],
+                           'min_limits': max([value for value in limits.values() if value < limits[level]], default=0)}
             return limits_dict
 
 
     # Функция, достающая штрафы, уменьшающие постоянный приоритет юзера
     async def get_current_fines(self, tg_id):
-        # Проверитьььььььььььььььььььь
         async with self.pool.acquire() as connection:
-            fines = await connection.fetch("SELECT reduction_in_priority FROM fines JOIN temporary USING(temporary_id) WHERE fines_type = 'temporary' AND valid_until > NOW() AND telegram_id = $1", tg_id)
+            fines = await connection.fetch("SELECT reduction_in_priority FROM fines JOIN temporary USING(fines_id) WHERE fines_type = 'temporary' AND valid_until > NOW() AND telegram_id = $1", tg_id)
             final_fine = 0
             for fine in fines:
-                final_fine += fine['reduction_in_priority']
+                final_fine += abs(fine['reduction_in_priority'])
             return final_fine
 
     # Проверяет, сколько времени назад пользователь отключал кнопку и не получал заданий
     async def check_button_time(self, tg_id):
         async with self.pool.acquire() as connection:
             check_time = await connection.fetchrow('SELECT countdown FROM reminder_steps WHERE telegram_id = $1', tg_id)
-            late_time = check_time['countdown'].astimezone(pytz.timezone('Europe/Moscow'))
-            now_time = datetime.datetime.now(pytz.timezone('Europe/Moscow'))
-            late_time_only = late_time.hour * 60 + late_time.minute
-            now_time_only = now_time.hour * 60 + now_time.minute
             finally_dict = {'time_has_passed': False, 'tasks_sent_recently': 0}
-            if late_time_only - now_time_only >= 480:
-                finally_dict['time_has_passed'] = True
-            count_sending_tasks = await connection.fetchrow("SELECT COUNT(*) FROM statistics JOIN tasks_messages USING(tasks_msg_id) WHERE statistics.telegram_id = $1 AND offer_time >= NOW() - INTERVAL '5 hours'", tg_id)
+            # Если он сам отключал кнопку, проверяем, сколько времени прошло
+            if check_time:
+                # Вычисляем, сколько прошло между отключением кнопки и настоящим
+                late_time = check_time['countdown'].astimezone(pytz.timezone('Europe/Moscow'))
+                now_time = datetime.datetime.now(pytz.timezone('Europe/Moscow'))
+                late_time_only = late_time.hour * 60 + late_time.minute
+                now_time_only = now_time.hour * 60 + now_time.minute
+                if late_time_only - now_time_only >= 480:
+                    finally_dict['time_has_passed'] = True
+            # Смотрим, когда он в последний раз получал задание
+            count_sending_tasks = await connection.fetchrow("SELECT COUNT(*) FROM statistics JOIN tasks_messages USING(tasks_msg_id) WHERE tasks_messages.telegram_id = $1 AND offer_time >= NOW() - INTERVAL '5 hours'", tg_id)
+            # Записываем, сколько за последних 5 часов ему было дано аккаунтов
             finally_dict['tasks_sent_recently'] = count_sending_tasks['count'] if count_sending_tasks and count_sending_tasks['count'] >= 1 else 0
             return finally_dict
 
+    # Информация о прошлых показателях за последние 3 дня
     async def user_executions_info(self, tg_id):
         async with self.pool.acquire() as connection:
             all_info = await connection.fetch("SELECT * FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN tasks USING(task_id) WHERE tasks_messages.telegram_id = $1 AND offer_time >= NOW() - INTERVAL '3 days' ORDER BY offer_time", tg_id)
+            # all_info = await connection.fetch("SELECT * FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN tasks USING(task_id) WHERE tasks_messages.telegram_id = $1 ORDER BY offer_time", tg_id)
+
             result_dict = {'number_scored': 0, 'number_failures': 0, 'number_late_failures': 0, 'acceptance_rate': 0}
             tasks_id = []
             tasks_number, start_number = 0, 0
             for info in all_info:
+                # Смотрим только первое выполнение таска, чтобы отсечь повторные
                 if info['task_id'] not in tasks_id:
+                    # Находим таски, которые он не доделал
                     if info['status'] == 'scored':
                         result_dict['number_scored'] += 1
                     elif info['status'] == 'refuse':
                         result_dict['number_failures'] += 1
                     elif info['status'] == 'refuse_late':
                         result_dict['number_late_failures'] += 1
-
+                    # Если таск был стартанут
                     if info['start_time']:
                         tasks_number += 1
                         start_number += 1
+                    # Если нет, проверяем, был ли он у юзера дольше 30 минут в игноре
                     elif info['deleted_time']:
                         offer_time = info['offer_time'].astimezone(pytz.timezone('Europe/Moscow'))
                         current_time = datetime.datetime.now(pytz.timezone('Europe/Moscow'))
@@ -1480,8 +1539,44 @@ class Database:
                         if time_difference > datetime.timedelta(minutes=30):
                             tasks_number += 1
                     tasks_id.append(info['task_id'])
-        result_dict['acceptance_rate'] = int(start_number / tasks_number * 100)
+        result_dict['acceptance_rate'] = int(start_number / max(tasks_number, 1) * 100)
         return result_dict
+
+    # Найти коэфициент выполнений за последние 3 дня
+    async def all_users_executions_info(self):
+        async with self.pool.acquire() as connection:
+            all_info = await connection.fetch("SELECT tasks_messages.telegram_id, task_id, start_time, tasks_messages.status FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN tasks USING(task_id) WHERE offer_time >= NOW() - INTERVAL '3 days' ORDER BY offer_time")
+            return self.select_completion_rate(all_info)
+
+    # Найти коэфициент выполнений среди пользователей с низким активом за последние 3 дня
+    async def users_executions_info_with_low_priority(self):
+        async with self.pool.acquire() as connection:
+            all_info = await connection.fetch("SELECT tasks_messages.telegram_id, task_id, start_time, tasks_messages.status FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN tasks_distribution USING(telegram_id) RIGHT JOIN tasks USING(task_id) WHERE offer_time >= NOW() - INTERVAL '3 days' AND priority <= 35 ORDER BY offer_time;")
+            return self.select_completion_rate(all_info)
+
+    # Отборрать коэфициент выполнений
+    def select_completion_rate(self, all_info):
+        all_tasks_executions = {}
+        counter_tasks = 0
+        counter_executions = 0
+        for info in all_info:
+            all_tasks_executions.setdefault(info['task_id'], [])
+            # Если юзер не выполнял это заданий
+            if info['telegram_id'] not in all_tasks_executions[info['task_id']]:
+                all_tasks_executions[info['task_id']].append(info['telegram_id'])
+                if info['start_time']:
+                    counter_tasks += 1
+                    if info['status'] == 'completed':
+                        counter_executions += 1
+        completion_rate = max(counter_executions, 1) / max(counter_tasks, 1)
+        return completion_rate if completion_rate > 0 else 1
+
+    # Достать кол-во выполнений и кол-во тех, кто в процессе, в таске
+    async def get_executions_and_in_process_number(self, task_id):
+        async with self.pool.acquire() as connection:
+            info = await connection.fetchrow("SELECT executions, (SELECT COUNT(completed_tasks.unique_id) FROM completed_tasks WHERE task_id = $1) as completed_tasks, COUNT(CASE WHEN tasks_messages.status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'checking') THEN 1 END) as in_process FROM tasks_messages RIGHT JOIN tasks USING(task_id) WHERE task_id = $1 GROUP BY 1", task_id)
+            return {'executions': info['executions'], 'completed_tasks': info['completed_tasks'], 'in_process': info['in_process']}
+
 
     # Достать всех забанненых юзеров
     async def get_is_banned_users(self):
@@ -1556,30 +1651,198 @@ class Database:
     # Изменение приоритета за выполнение задания
     async def change_priority_completing_task(self, tg_id, task_id):
         async with self.pool.acquire() as connection:
-            # Находим отоговый приоритет, который будет у пользователя
-            max_priority = 100 - await self.get_current_fines(tg_id)
-            now_priority = await self.check_priority(tg_id)
+            # Находим иотоговый приоритет, который будет у пользователя
             priority_change = await self.get_priority_change()
             number_executions = await connection.fetchrow("SELECT COUNT(*) as executions FROM completed_tasks WHERE task_id = $2 AND telegram_id = $1", tg_id, task_id)
-            # Если это первое выполнение задания
-            if number_executions['executions'] == 1:
-                finally_priority = min(priority_change['completing_task'] + now_priority, max_priority)
+            # Если это первое выполнение задания и выполнений до этого не было
+            if number_executions['executions'] == 0:
+                finally_priority = await self.max_priority(tg_id, priority_change['completing_task'])
                 await connection.execute('UPDATE tasks_distribution SET priority = $2 WHERE telegram_id = $1', tg_id, finally_priority)
-            # Если уже не первое
-            elif number_executions['executions'] <= 4:
-                finally_priority = min(priority_change['re_execution'] + now_priority, max_priority)
+            # Если уже не первое, но не более трёх
+            elif number_executions['executions'] <= 3:
+                finally_priority = await self.max_priority(tg_id, priority_change['re_execution'])
                 await connection.execute('UPDATE tasks_distribution SET priority = $2 WHERE telegram_id = $1', tg_id, finally_priority)
 
-    # # Проверка на то, что юзер проигнорил более 5 сообщений о тасках подряд и каждый висел у него более 30 минут
-    # async def check_to_ignore_tasks(self, tg_id):
-    #     async with self.pool.acquire() as connection:
-    #         tasks = await connection.fetchrow("SELECT offer_time, offer_time_more, deleted_time FROM tasks_messsages JOIN statistics USING (tasks_msg_id) WHERE telegram_id = $1 ORDER BY tasks_msg_id DESC", tg_id)
-    #         counter = 0
-    #         for task in tasks:
-    #             # Если на таск была какая
-    #             if task
+    # Проверка на то, что юзер проигнорил более 5 сообщений о тасках подряд и каждый висел у него более 30 минут
+    async def check_to_ignore_tasks(self, tg_id):
+        async with self.pool.acquire() as connection:
+            # Отбор последних 5 сообщений о тасках, которые провисели дольше 30 минут
+            tasks = await connection.fetch("SELECT offer_time, offer_time_more, start_time, deleted_time, status FROM tasks_messages JOIN statistics USING (tasks_msg_id) WHERE telegram_id = $1 ORDER BY tasks_msg_id DESC LIMIT 5", tg_id)
+            if not tasks:
+                return False
+            counters_dict = {'offer': 0, 'hiding': 0, 'refuse': 0, 'scored': 0}  # Счётчики действий
+            punitive_dict = {'offer': 5, 'hiding': 3, 'refuse': 3, 'scored': 2}  # Дикт с тем, до какого числа дожен дойти счётчик, чтобы воркер получил по жопе
+            change_priority = {'offer': -5, 'hiding': -7, 'refuse': -6, 'scored': -20}  # Как сильно изменится приоритет после этого
+            for task in tasks:
+                offer_time = task['offer_time'].astimezone(pytz.timezone('Europe/Moscow'))
+                deleted_time = task['deleted_time'].astimezone(pytz.timezone('Europe/Moscow')) if task['deleted_time'] else datetime.datetime.now(pytz.timezone('Europe/Moscow'))
+                deleted_time_only = deleted_time.hour * 60 + deleted_time.minute
+                offer_time_only = offer_time.hour * 60 + offer_time.minute
+                time_difference = deleted_time_only - offer_time_only
+                # Если таск был проигнорен, но он пролежал более 30 минут
+                if not task['offer_time_more'] and time_difference > 30:
+                    counters_dict['offer'] += 1
+                else:
+                    counters_dict['offer'] = -10
+                # Если таск был скрыт
+                if task['offer_time_more'] and not task['start_time'] and task['status'] == 'deleted':
+                    counters_dict['hiding'] += 1
+                else:
+                    counters_dict['hiding'] = -10
+                # Если был отказ от таска
+                if task['status'] == 'refuse' or task['status'] == 'refuse_late':
+                    counters_dict['refuse'] += 1
+                else:
+                    counters_dict['refuse'] = -10
+                # Если с таском произошло забитие
+                if task['status'] == 'scored':
+                    counters_dict['scored'] += 1
+                else:
+                    counters_dict['scored'] = -10
+
+                # Проверяем, было ли что-то найдено
+                for action in counters_dict:
+                    # Если что-то найдено, даём по жопе
+                    if counters_dict[action] == punitive_dict[action]:
+                        # Если юзер уже много раз забил на таски, делаем понижение макс рейтинга на 3 дня
+                        if action == 'scored':
+                            await self.add_new_priority_fines(tg_id)
+                        # Понижение в рейтинге + отключение кнопки
+                        finally_priority = await self.min_priority(tg_id, change_priority[action])
+                        print('Отдаю ключ ', finally_priority)
+                        await connection.execute('UPDATE tasks_distribution SET priority = $2 WHERE telegram_id = $1', tg_id, finally_priority)
+                        await self.change_in_circle(tg_id)
+                        return action
+            return False
+
+    # Создать новый штраф, связанный с постоянным понижение рейтинга
+    async def add_new_priority_fines(self, tg_id, constant_decline=-10):
+        async with self.pool.acquire() as connection:
+            async with connection.transaction():
+                fines_id = await connection.fetchval("INSERT INTO fines(telegram_id, fines_type) VALUES ($1, 'temporary') RETURNING fines_id", tg_id)
+                await connection.execute("INSERT INTO temporary(fines_id, valid_until, reduction_in_priority) VALUES ($1, NOW() + INTERVAL '3 days', $2)", fines_id, constant_decline)
+
+    async def add_new_reward_fines(self, tg_id, task_id, awards_cut=30):
+        async with self.pool.acquire() as connection:
+            async with connection.transaction():
+                fines_id = await connection.fetchval("INSERT INTO fines(telegram_id, fines_type) VALUES ($1, 'temporary') RETURNING fines_id", tg_id)
+                task_info = await connection.fetchrow('SELECT telegram_id, price FROM tasks WHERE task_id = $1', task_id)
+                await connection.execute("INSERT INTO bought(fines_id, remaining_to_redeem, awards_cut, victim_user) VALUES ($1, $2, $3, $4)", fines_id, task_info['price'], awards_cut, task_id['telegram_id'])
+
+    # Достать тг id из сообщения о таске
+    async def get_telegram_id_from_tasks_messages(self, tasks_msg_id):
+        async with self.pool.acquire() as connection:
+            tg_id = await connection.fetchrow('SELECT telegram_id FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
+            return tg_id['telegram_id']
+
+    # Взять минимально возможный приоритет юзера
+    async def min_priority(self, tg_id, change_priority):
+        min_priority = 1
+        priority_now = await self.check_priority(tg_id)
+        return max(priority_now + change_priority, min_priority)
+
+    # Взять максимально возможный приоритет юзера
+    async def max_priority(self, tg_id, change_priority):
+        max_priority = 100 - await self.get_current_fines(tg_id)
+        priority_now = await self.check_priority(tg_id)
+        return min(priority_now + change_priority, max_priority)
+
+    # Взять то, сколько тасков нужно сделать на уровень
+    async def get_need_for_level(self):
+        async with self.pool.acquire() as connection:
+            need_tasks = await connection.fetchrow('SELECT prelim, main, challenger, champion FROM number_of_completed_tasks')
+            return {level: value for level, value in need_tasks.items()}
+
+    # Взять то, сколько нужно именть аккаунтов на уровень
+    async def get_need_accounts(self):
+        async with self.pool.acquire() as connection:
+            need_accounts = await connection.fetchrow('SELECT prelim, main, challenger, champion FROM number_of_accounts')
+            return {level: value for level, value in need_accounts.items()}
+
+    # Информация о нужно уровне, действующих аккаунтах и выполненных заданиях для повышения уровня
+    async def get_info_for_change_level(self, tg_id):
+        async with self.pool.acquire() as connection:
+            levels = await connection.fetchrow('SELECT prelim, main, challenger, champion FROM number_of_completed_tasks')
+            levels = [level for level in levels.keys()]
+            need_level = levels[*[i+1 for i in range(len(levels)) if levels[i] == level['level'] and level != 'champion']]
+            if need_level:
+                level = await connection.fetchrow('SELECT level FROM tasks_distribution WHERE telegram_id = $1', tg_id)
+                accounts = await connection.fetchrow("SELECT COUNT(account_name) FROM accounts WHERE telegram_id = $1 AND deleted = False AND account_status = 'active'", tg_id)
+                completed_tasks = await connection.fetchrow('SELECT COUNT(*) FROM completed_tasks LEFT JOIN tasks_distribution USING(telegram_id) WHERE date_of_last_check < date_of_completion AND telegram_id = $1', tg_id)
+                return {'need_level': need_level, 'accounts': accounts['count'], 'completed_tasks': completed_tasks['count']}
+            return False
+
+    # Функция для проверки на повышение уровня и сохранения уровня
+    async def up_and_save_level(self, tg_id):
+        async with self.pool.acquire() as connection:
+            user_info_dict = await self.get_info_for_change_level(tg_id)
+            if user_info_dict:  # Если нужный уровень есть в запросе (т.е. юзер не наивысшего уровня и ему есть, куда расти)
+                need_tasks_dict = await self.get_need_for_level()
+                need_accounts_dict = await self.get_need_for_level()
+                # Проверка на то, что хватает выполненных заданий и аккаунтов для нового уровня
+                if user_info_dict['completed_tasks'] >= need_tasks_dict[user_info_dict['need_level']] and \
+                        user_info_dict['accounts'] >= need_accounts_dict[user_info_dict['need_level']]:
+                    # Повышенние уровня
+                    await connection.execute("UPDATE tasks_distribution SET level = $2 WHERE telegram_id = $1", tg_id, user_info_dict['need_level'])
+                    # Обновление даты взятия уровня
+                    await connection.execute('UPDATE tasks_distribution SET date_update_level = now() WHERE telegram_id = $1', tg_id)
+
+    # Сбор всех челиксов, у которых прошла неделя с момента апа уровня
+    async def get_users_after_up_level(self):
+        async with self.pool.acquire() as connection:
+            all_users = await connection.fetch("SELECT telegram_id, level, COUNT(unique_id) as completed_tasks  FROM tasks_distribution RIGHT JOIN completed_tasks USING(telegram_id) WHERE NOW() - date_update_level >= INTERVAL '7 days' AND date_of_completion >= date_of_last_check AND level <> 'vacationers' GROUP BY telegram_id, level")
+            return {user['telegram_id']: {'completed_tasks': user['completed_tasks'], 'level': user['level']} for user in all_users}
+
+    # Понижение воркера в уровне
+    async def decline_in_level(self, workers_dict):
+        # Проверить на работу с левелами прелим и отдыхающий
+        async with self.pool.acquire() as connection:
+            need_dict = await self.get_need_for_level()
+            levels_dict = {1: 'vacationers', 2: 'prelim', 3: 'main', 4: 'challenger', 5: 'champion'}
+            # Проверка на то, какой уровень выдать юзеру
+            for worker in workers_dict:
+                level_worker = workers_dict[worker]['level']
+                completed_tasks = workers_dict[worker]['completed_tasks']
+                key = [key for key, level in levels_dict.items() if level == level_worker]
+                # Понижение на 1 уровень
+                if completed_tasks >= need_dict[levels_dict[key[0] - 1]] or need_dict[levels_dict[key[0] - 1]] == 'vacationers':
+                    new_level = need_dict[levels_dict[key[0] - 1]]
+                # Понижение на 2 уровня
+                else:
+                    new_level = need_dict[levels_dict[key[0] - 2]]
+                await connection.execute('UPDATE tasks_distribution SET level = $2 WHERE telegram_id = $1', worker, new_level)
+
+    # Обновление времени чекоров уровня и чекера тасков
+    async def update_time_for_level(self, workers):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE tasks_distribution SET date_of_last_check = NOW(), date_update_level = NOW() WHERE telegram_id = ANY($1)', workers)
+
+    # Достать все таски, которые уже полежали более 10 минут
+    async def get_active_tasks(self):
+        async with self.pool.acquire() as connection:
+            # tasks = await connection.fetch("SELECT tb_1.task_id, tb_1.executions, NOW() - tb_1.date_of_creation as passed_after_creation, NOW() - tb_1.date_of_check as passed_after_check, tb_1.in_process, COUNT(completed_tasks.unique_id) as completed_tasks FROM completed_tasks RIGHT JOIN (SELECT tasks.task_id, executions, date_of_creation, date_of_check, COUNT(CASE WHEN tasks_messages.status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'checking') THEN 1 END) as in_process FROM tasks_messages RIGHT JOIN tasks USING(task_id) WHERE tasks.status='active' AND NOW() - tasks.date_of_check >= INTERVAL '20 minutes' GROUP BY tasks.task_id, date_of_creation, date_of_check) as tb_1 USING(task_id) GROUP BY 1, 2, 3, 4, 5")
+            tasks = await connection.fetch("SELECT tb_1.task_id, tb_1.executions, NOW() - tb_1.date_of_creation as passed_after_creation, NOW() - tb_1.date_of_check as passed_after_check, tb_1.in_process, COUNT(completed_tasks.unique_id) as completed_tasks FROM completed_tasks RIGHT JOIN (SELECT tasks.task_id, executions, date_of_creation, date_of_check, COUNT(CASE WHEN tasks_messages.status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'checking') THEN 1 END) as in_process FROM tasks_messages RIGHT JOIN tasks USING(task_id) WHERE tasks.status='active' AND round IS NULL GROUP BY tasks.task_id, date_of_creation, date_of_check) as tb_1 USING(task_id) GROUP BY 1, 2, 3, 4, 5")
+            return {task['task_id']: {'executions': task['executions'], 'passed_after_creation': task['passed_after_creation'], 'passed_after_check': task['passed_after_check'], 'completed_tasks': task['completed_tasks'], 'in_process': task['in_process']} for task in tasks}
 
 
+    # Обновлить время последнего чека во всех заданиях
+    async def update_check_time(self, tasks: list):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE tasks SET date_of_check = NOW() WHERE task_id = ANY($1)', tasks)
+
+    # Получить настоящий раунд какого-то таска
+    async def get_round_from_task(self, task_id):
+        async with self.pool.acquire() as connection:
+            task_round = await connection.fetchrow('SELECT round FROM tasks WHERE task_id = $1', task_id)
+            return task_round['round']
+
+    # Узнать, есть ли активные задания
+    async def check_active_tasks(self):
+        async with self.pool.acquire() as connection:
+            check_status_tasks = await connection.fetchrow("SELECT task_id FROM tasks WHERE status = 'active'")
+            if check_status_tasks:
+                return True
+            return False
 
 
 db = Database()

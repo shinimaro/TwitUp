@@ -3,7 +3,7 @@ from bot_apps.wordbank import task_completion
 
 
 # Билдер текста к комментарию
-async def _comment_note_text_builder(info):
+def _comment_note_text_builder(info):
     if not info:
         return False
     note_text = '\n<b>Комментарий должен: </b>\n'
@@ -24,6 +24,21 @@ async def _comment_note_text_builder(info):
     return note_text
 
 
+# Получить начальный список c заданиями
+def _get_sorted_list(task_info, link_action):
+    action_order = {'subscriptions': 1, 'likes': 2, 'retweets': 3, 'comments': 4}
+    sorted_action = sorted(task_info['type_task'], key=lambda x: action_order.get(x))
+    # Подготовка текста для построения ссылки
+    action_dict = {'subscriptions': '🎯Подписка на профиль', 'likes': '🎯Лайк на пост', 'retweets': '🎯Ретвит поста', 'comments': '🎯Комментарий поста'}
+    links_dict = {'subscriptions': 'https://twitter.com/intent/follow?screen_name={0}',
+                  'likes': 'https://twitter.com/intent/like?tweet_id={0}',
+                  'retweets': 'https://twitter.com/intent/retweet?tweet_id={0}',
+                  'comments': 'https://twitter.com/intent/tweet?in_reply_to={0}'}
+    main_text = ''.join([f'<a href="{links_dict[i].format(link_action["profile_name"] if i == "subscriptions" else link_action["post_id"])}">{action_dict[i]}</a>\n' for i in sorted_action])
+    main_text += _comment_note_text_builder(task_info['comment_parameter']) if 'comment_parameter' in task_info and task_info['comment_parameter'] else ''
+    return main_text
+
+
 # Функция для билдинга типа задания и его номера (1. лайк, 2. ретвит и т.д.)
 async def _task_list_builder(tasks: list) -> str:
     action_order = {'subscriptions': 1, 'likes': 2, 'retweets': 3, 'comments': 4}
@@ -36,17 +51,17 @@ async def _task_list_builder(tasks: list) -> str:
 async def full_text_task_builder(tasks_msg_id):
     task_info = await db.open_task(int(tasks_msg_id))
     if not task_info:
-        return None
+        return 'Задание не найдено'
     text = '✨<b>Новое задание✨</b>\n'
     text += f'<b>Награда: {int(task_info["price"]) if task_info["price"].is_integer() else round(task_info["price"], 2)} $STB</b>\n\n'
 
     text += '<b>Действия:</b>\n'
     text += await _task_list_builder(task_info['type_task'])
     # Если были заданы настройки комментария
-    text += await _comment_note_text_builder(task_info['comment_parameter']) if 'comment_parameter' in task_info and task_info['comment_parameter'] else ''
+    text += _comment_note_text_builder(task_info['comment_parameter']) if 'comment_parameter' in task_info and task_info['comment_parameter'] else ''
 
-    limit_executions = await db.get_task_limit(tasks_msg_id)
-    text += f'\n<b>Задание доступно к выполнению с {limit_executions} аккаунтов</b>\n'
+    executions = await db.get_task_actual_limit(tasks_msg_id)
+    text += f"\n<b>Задание доступно к выполнению с <code>{executions}</code> {'аккаунта' if executions == 1 else 'аккаунтов'}</b>\n"
 
     text += '\n<i>После того, как ты нажмёшь кнопку "</i>👨‍🦽<i>Начать задание", у тебя будет 10 минут на его выполнение. Удачи</i>🧚‍♂️'
 
@@ -64,17 +79,7 @@ async def context_task_builder(tasks_msg_id: int | str, account: str, not_comple
     task_info = await db.open_task(int(tasks_msg_id))
     link_action = await db.get_link_action(tasks_msg_id)
     text = f"А вот и комплексное задание🧞\n\n<b>Что обязательно нужно сделать?</b> ({len(task_info['type_task'])} действия):\n\n"
-    # Сортировка списка
-    action_order = {'subscriptions': 1, 'likes': 2, 'retweets': 3, 'comments': 4}
-    sorted_action = sorted(task_info['type_task'], key=lambda x: action_order.get(x))
-    # Подготовка текста для построения ссылки
-    action_dict = {'subscriptions': '🎯Подписка на профиль', 'likes': '🎯Лайк на пост', 'retweets': '🎯Ретвит поста', 'comments': '🎯Комментарий поста'}
-    links_dict = {'subscriptions': 'https://twitter.com/intent/follow?screen_name={0}', 'likes': 'https://twitter.com/intent/like?tweet_id={0}',
-                  'retweets': 'https://twitter.com/intent/retweet?tweet_id={0}', 'comments': 'https://twitter.com/intent/tweet?in_reply_to={0}'}
-
-    text += ''.join([f'<a href="{links_dict[i].format(link_action["profile_name"] if i == "subscriptions" else link_action["post_id"])}">{action_dict[i]}</a>\n' for i in sorted_action])
-
-    text += await _comment_note_text_builder(task_info['comment_parameter']) if 'comment_parameter' in task_info and task_info['comment_parameter'] else ''
+    text += _get_sorted_list(task_info, link_action)
     text += f'\n<b>Аккаунт,</b> с которого нужно выполнить задание: <a href="https://twitter.com/{account[1:]}">{account}</a>\n'
 
     if not not_complete:
@@ -82,7 +87,7 @@ async def context_task_builder(tasks_msg_id: int | str, account: str, not_comple
     else:
         dop_dict = {'subscriptions': 'не подписался на профиль', 'likes': 'не поставил лайк на пост', 'retweets': 'не ретвитнул пост'}
         # Если был задан комментарий, то завершаем работу билдера, т.к. текст для комментария делается в другой функции
-        if not_complete in ('comment', 'comments'): # в 1 функции добавляется comments, в остальных comment, поэтому добавил 2 текста в кортеж
+        if not_complete in ('comment', 'comments'):  # в 1 функции добавляется comments, в остальных comment, поэтому добавил 2 текста в кортеж
             return text
         text += f'\nКажется, ты <b>{dop_dict[not_complete]}</b>🥺\nЗакончи это задание и жми <b>"ПРОВЕРИТЬ ЗАДАНИЕ"</b>👇'
     return text
@@ -94,18 +99,7 @@ async def new_account_from_task_builder(tasks_msg_id, account):
     task_info = await db.open_task(int(tasks_msg_id))
     link_action = await db.get_link_action(tasks_msg_id)
     text += f"А вот и комплексное задание🧞\n\n<b>Что обязательно нужно сделать?</b> ({len(task_info['type_task'])} действия):\n\n"
-    # Сортировка списка
-    action_order = {'subscriptions': 1, 'likes': 2, 'retweets': 3, 'comments': 4}
-    sorted_action = sorted(task_info['type_task'], key=lambda x: action_order.get(x))
-    # Подготовка текста для построения ссылки
-    action_dict = {'subscriptions': '🎯Подписка на профиль', 'likes': '🎯Лайк на пост', 'retweets': '🎯Ретвит поста',
-                   'comments': '🎯Комментарий поста'}
-    links_dict = {'subscriptions': 'https://twitter.com/intent/follow?screen_name={0}',
-                  'likes': 'https://twitter.com/intent/like?tweet_id={0}',
-                  'retweets': 'https://twitter.com/intent/retweet?tweet_id={0}',
-                  'comments': 'https://twitter.com/intent/tweet?in_reply_to={0}'}
-    text += ''.join([f'<a href="{links_dict[i].format(link_action["profile_name"] if i == "subscriptions" else link_action["post_id"])}">{action_dict[i]}</a>\n' for i in sorted_action])
-    text += await _comment_note_text_builder(task_info['comment_parameter']) if 'comment_parameter' in task_info and task_info['comment_parameter'] else ''
+    text += _get_sorted_list(task_info, link_action)
 
     # Если у пользователя есть только 1 аккаунт, с которого можно сделать задание, то говорим, чтобы он сделал задание с него
     if account:
@@ -130,7 +124,7 @@ async def content_comment_builder(tasks_msg_id):
     text = '\n\nЕсли ты уверен, что оставил его в отведенные 10 минут и всё в нем указано правильно - напиши агенту поддержки, он всё проверит и поможет❤️\n\n'
     text += '<b>✨Напоминание✨</b>'
     text += f'\n<b>Аккаунт,</b> с которого нужно выполнить задание: <a href="https://twitter.com/{account[1:]}">{account}</a>\n'
-    text += await _comment_note_text_builder(task_info['comment_parameter']) if 'comment_parameter' in task_info and task_info['comment_parameter'] else ''
+    text += _comment_note_text_builder(task_info['comment_parameter']) if 'comment_parameter' in task_info and task_info['comment_parameter'] else ''
     return text
 
 
@@ -147,11 +141,14 @@ async def control_statistic_builder(tg_id, tasks_msg_id):
     info_dict = await db.get_info_to_user_and_tasks(tg_id)
     text += f"<b>Актуальный баланс: {int(info_dict['balance']) if info_dict['balance'].is_integer() else round(info_dict['balance'], 2)} STB$</b>\n"
     text += f"<b>Заданий выполнено сегодня: {info_dict['tasks_completed']}</b>\n"
-    text += f"<b>Доступно к выполнению на всех аккаунтах: {info_dict['open_tasks']}</b>\n"
+    executions = await db.get_task_actual_limit(tasks_msg_id)
+    # Если ещё есть выполнения и задание не было завершено
+    if executions > 0 and await db.task_again(tg_id, tasks_msg_id):
+        text += f"\n<b>Задание доступно к выполнению с ещё <code>{executions}</code> {'аккаунта' if executions == 1 else 'аккаунтов'}</b>\n"
+        text += '\nТы можешь выполнить прошлое задание еще раз с другого аккаунта👇'
+    else:
+        text += f"<b>Доступных заданий прямо сейчас: {info_dict['open_tasks']}</b>\n"
 
-    # Если пользователь может выполнить этот таск с ещё одного аккаунта, то предлагаем ему это сделать
-    if await db.task_again(tg_id, tasks_msg_id):
-        text += '\nКстати, ты можешь выполнить прошлое задание еще раз с другого аккаунта👇'
     return text
 
 

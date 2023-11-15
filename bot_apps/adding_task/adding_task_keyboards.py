@@ -263,6 +263,17 @@ async def add_task_keyboad_builder():
     return add_task_keyboad.as_markup()
 
 
+# Клавиатура под сообщением о том, что линк не найден
+async def not_existing_link_builder():
+    not_existing_link = BD()
+    not_existing_link.row(
+        IB(text=add_task['buttons']['back_setting_button'],
+           callback_data='back_accept_setting_task'),
+        IB(text=BACK_MAIN_MENU,
+           callback_data='back_to_main_menu'), width=1)
+    return not_existing_link.as_markup()
+
+
 # Клавиатура под уведомлением о завершении таска
 async def completed_task_keyboard_builder():
     completed_task_keyboard = BD()

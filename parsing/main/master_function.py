@@ -3,6 +3,7 @@ import os
 import pickle
 import re
 from asyncio import gather, sleep
+from typing import TypedDict
 
 import aiofiles
 import pyppeteer.errors
@@ -18,11 +19,14 @@ from parsing.start_webdriver.webdriver import webdriver, load_base_twitter_url
 config = load_config()
 
 
+class WatchmanWebdriver(TypedDict):
+    page: Page
+    driver: Browser
+
+
 class Master:
     usable_drivers_queue = asyncio.Queue(maxsize=config.webdrivers.num_webdrivers)
-    watchman_webdriver: Browser = None
-    # def __init__(self, num_webdrivers: int = config.webdrivers.num_webdrivers):
-    #     self.num_webdrivers = num_webdrivers
+    watchman_webdriver: dict[WatchmanWebdriver] = {'page': None, 'driver': None}
 
     # Генерация всех базовых вебдрайверов
     async def generate_main_driver(self):
@@ -44,17 +48,30 @@ class Master:
     # Функция для включения вебдрайвера-сторожа для парсинга пепещиков
     async def watchman_webdriver_activate(self):
         driver = await webdriver()
-        page = (await driver.pages())[0]
+        self.watchman_webdriver['driver'] = driver
+        self.watchman_webdriver['page'] = (await driver.pages())[0]
+        page: Page = self.watchman_webdriver['page']
         await page.goto(base_links['followers_page'])
 
+    # Функция для обновления вебдрайвера сторожа
+    async def update_watchman_webdriver(self):
+        new_driver = await self.get_driver()
+        await self.give_driver(self.watchman_webdriver['driver'])
+        self.watchman_webdriver['driver'] = new_driver
+        self.watchman_webdriver['page'] = (await new_driver.pages())[0]
+        page: Page = self.watchman_webdriver['page']
+        await page.goto(base_links['followers_page'])
+
+
     # Закрытие вебдрайвера через закрытие всех его страниц
-    async def close_driver(self, driver):
+    async def close_driver(self, driver: Browser):
         await asyncio.gather(*[page.close() for page in await driver.pages()])
 
     # Закрытие всех лишних страниц в вебдрайвере
     async def close_pages(self, driver):
         await asyncio.gather(*[page.close() for page in (await driver.pages())[1:]])
 
+    # Достать драйвер
     async def get_driver(self) -> Browser:
         # Если в очереди есть вебдрайвер, достаём его
         if not self.usable_drivers_queue.empty():
@@ -63,8 +80,9 @@ class Master:
         else:
             return await webdriver()
 
+    # Вернуть драйвер
     async def give_driver(self, driver: Browser):
-        # Если очередь ещё не заполнена, добавляем в неё новый драйвер, перед этим закрывая лишние страницы
+        # Если очередь ещё не заполнена, добавляем в неё новый драйвер, перед этим закрывая лишние окна
         if not self.usable_drivers_queue.full():
             await self.close_pages(driver)
             await self.usable_drivers_queue.put(driver)

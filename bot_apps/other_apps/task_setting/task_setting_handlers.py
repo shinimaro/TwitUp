@@ -25,15 +25,15 @@ async def process_change_all_notifications(callback: CallbackQuery, state: FSMCo
         await callback.answer(setting[f"all_setting_{callback.data[18:]}"])
         await process_open_main_menu(callback, state)
         if callback.data[18:] == 'on':
+            # Функция для выставления нового приоритета, если воркер долго был в афк
             await determine_initial_priority(callback.from_user.id)
     else:
         text = await text_except_all_notifications(callback.from_user.id)
         await callback.answer(text, show_alert=True)
 
 
-
 # Пользователь зашёл в настройки уведомлений
-@router.callback_query(F.data =='setting_tasks')
+@router.callback_query(F.data == 'setting_tasks')
 async def open_setting_tasks(callback: CallbackQuery):
     await callback.message.edit_text(text=setting['main_text'] + (
         '\n\n' + setting['dop_text'] if await db.get_all_notifications_and_account(callback.from_user.id) else ''),

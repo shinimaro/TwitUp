@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 
 from bot_apps.FSM.FSM_states import FSMAddTask, FSMAccounts
 from bot_apps.filters.ban_filters.is_banned import IsBanned
+from bot_apps.task_push.system.change_task_button import change_task_buttons
 from databases.database import db
 from bot_apps.task_push.system.delete_task_messages import function_distributor_task_messages
 from bot_apps.task_push.system.send_letter_of_happiness import availability_check
@@ -32,7 +33,6 @@ router.message.filter(IsBanned())
 @router.callback_query(F.data.startswith('open_task_'))
 async def open_new_task(callback: CallbackQuery):
     tasks_msg_id = int(callback.data[10:])
-    await db.definition_of_beginners(tasks_msg_id)  # Проверка на новичка
     await db.update_status_and_time(tasks_msg_id, 'offer_more')
     await callback.message.edit_text(await full_text_task_builder(tasks_msg_id),
                                      reply_markup=await revealing_task_builder(tasks_msg_id))
@@ -47,6 +47,7 @@ async def process_hide_task(callback: CallbackQuery):
         await db.add_del_time_in_task(tasks_msg_id)
         await db.add_deleted_status(tasks_msg_id)
         await db.add_note_about_hiding(tasks_msg_id)
+        await change_task_buttons(tasks_msg_id)
     await bot.delete_message(chat_id=callback.message.chat.id, message_id=callback.message.message_id)
 
 
@@ -146,17 +147,16 @@ async def process_refuse_task(callback: CallbackQuery):
     await db.del_and_change_status_task(tasks_msg_id)
     await db.add_note_about_refuse(tasks_msg_id)
     await db.add_del_time_in_task(tasks_msg_id)
-    # await db.
+    await change_task_buttons(tasks_msg_id)
     await callback.answer(task_completion['late_refuse_task'])
     await callback.message.delete()
-
 
 
 # Пользователь решил отказаться от задания, но после выполнения этого же задания на другом аккаунте (послабления какие-либо будут)
 @router.callback_query(F.data.startswith('refuse_for_new_task_'))
 async def process_refuse_for_new_task(callback: CallbackQuery):
     tasks_msg_id = int(callback.data[20:])
-    await db.del_and_change_status_task_2(tasks_msg_id)
+    await db.del_and_change_status_task(tasks_msg_id, no_first_execution=True)
     await callback.answer(task_completion['late_refuse_task'])
     await callback.message.delete()
 

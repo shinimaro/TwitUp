@@ -1,16 +1,20 @@
 import asyncio
 import datetime
 from asyncio import sleep
+from typing import NoReturn
+
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 
 from databases.database import db
 from bot_apps.other_apps.task_setting.task_setting_keyboards import keyboard_under_reminder_builder
+from bot_apps.filters.limits_filters.message_limit_filter import MessageFilter
 from bot_apps.wordbank import setting
 from config import load_config
 
 config = load_config()
 bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
+message_filter = MessageFilter()
 
 
 # Функция, которая будет напоминать пользователю о том, что он отключил задания
@@ -20,7 +24,7 @@ async def setting_reminder():
     tasks = []
     for user, value in users_dict.items():
         time_difference = datetime.datetime.now().astimezone() - value['countdown']
-        # Если прошло достаточно времени для добавления хотя бы первого этапа
+        # Если прошло достаточно времени для добавления первого этапа
         if time_difference.total_seconds() - 60 * 60 * 24 >= 0 and value['last_step'] == 'step_0':
             tasks.extend([remind_users_about_notifications(users_dict[user], user)])
         # Для второго этапа
@@ -30,7 +34,7 @@ async def setting_reminder():
         elif time_difference.total_seconds() - 60 * 60 * 168 >= 0 and value['last_step'] == 'step_2':
             tasks.extend([remind_users_about_notifications(users_dict[user], user)])
 
-        # Помаленьку сообщения пусть высылает, чтобы не нагружать бота
+        # По-маленьку сообщения пусть высылает, чтобы не нагружать бота
         if len(tasks) == 3:
             await asyncio.gather(*tasks)
             await sleep(3)
@@ -43,6 +47,7 @@ async def setting_reminder():
 async def remind_users_about_notifications(info_dict, tg_id):
     await db.update_step_task_notification(tg_id, f"step_{int(info_dict['last_step'][5:]) + 1}")
     try:
+        await message_filter(user_id=tg_id)
         await bot.send_message(
             chat_id=tg_id,
             text=setting['type_notification'][info_dict['last_step']],
@@ -51,8 +56,8 @@ async def remind_users_about_notifications(info_dict, tg_id):
         pass
 
 
-async def function_distributor_reminders():
+async def function_distributor_reminders() -> NoReturn:
     while True:
         await setting_reminder()
-        await sleep(4)
+        await sleep(20 * 60)
 

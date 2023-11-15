@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import TypedDict
 
 from aiogram import Router, Bot, F
@@ -18,6 +19,7 @@ bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
 message_filter = MessageFilter()
 they_banned = TheyBanned()
 
+
 class TaskInfo(TypedDict):
     count_complete: int
     price: int | float
@@ -29,11 +31,11 @@ async def sus(message: Message):
     print(a)
 
 
-@router.message(F.text == 'q')
-async def sus(message: Message):
-# async def sending_tasks(task_id: int, workers: dict[int, int]) -> None:
-    task_id = 1
-    workers = {1338827549: 2}
+async def sending_task(task_id: int, workers: dict[int, int]) -> None:
+# @router.message(F.text == 'q')
+# async def sus(message: Message):
+#     task_id = 1
+#     workers = {message.from_user.id: 2}
     tasks = []
     # Взятие некоторой информации по заданию
     task_info: TaskInfo = await db.get_all_completed_and_price(task_id)
@@ -61,9 +63,12 @@ async def send_message_to_worker(tg_id, tasks_msg_id, price, count_complete):
             reply_markup=await new_task_keyboard_builder(tasks_msg_id),
             disable_web_page_preview=True)
     except TelegramForbiddenError:
+        pass
         # Если не получилось отправить, удаляем сообщение из бд
         await db.delete_task_message(tasks_msg_id)
         await they_banned.adding_they_blocked_users(tg_id)
     else:
         # Если всё ок, дополняется запись в бд о таске
         await db.add_info_task_message(tasks_msg_id, message_id.message_id)
+        # Проверка на новичка
+        await db.definition_of_beginners(tasks_msg_id)

@@ -125,22 +125,3 @@ async def parsing_comment_text(tasks_msg_id, link_to_comment: str) -> str | bool
         except asyncio.TimeoutError:
             await master.give_broke_driver(driver)
             return None
-
-
-# Временное хранилище, вместо редиса
-all_our_users: set[str] = set()
-
-# Функция для парсинга наших подписчиков
-async def parsing_our_subscribers():
-    master = Master()
-    common_page = (await master.watchman_webdriver.pages())[0]
-    while True:
-        await common_page.reload()
-        await common_page.waitForSelector(converter(subscribers_blocks['username_block']))
-        users = set()
-        while len(users) < 15:
-            await asyncio.sleep(1)
-            html = await common_page.content()
-            users.update(await find_all_users(html, common_page))
-        global all_our_users
-        all_our_users = users

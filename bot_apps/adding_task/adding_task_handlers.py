@@ -1,3 +1,6 @@
+from asyncio import sleep
+from typing import Literal
+
 from aiogram import Router, Bot, F
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
@@ -10,15 +13,17 @@ from bot_apps.adding_task.adding_task_keyboards import select_actions_builder, s
     back_button_to_setting_task_builder, comment_parameters_builder, comment_criteria_builder, \
     select_minimum_parameters_builder, back_to_checking_comment_builder, add_note_in_comment_builder, \
     do_you_really_want_to_leave_builder, add_number_user_builder, final_add_task_builder, add_task_keyboad_builder, \
-    not_money_keyboard_builder, not_payments_builder
+    not_money_keyboard_builder, not_payments_builder, not_existing_link_builder
 from bot_apps.adding_task.adding_task_text import task_setting_text_builder, \
     text_under_comment_parameters_builder, text_under_adding_one_parameter_builder, define_price, final_text_builder, \
     no_money_text_builder, count_commission, text_before_posting
 from bot_apps.filters.ban_filters.is_banned import IsBanned
+from bot_apps.task_push.system.sending_tasks.start_task import start_task
 from databases.database import db
 from bot_apps.other_apps.main_menu.main_menu_functions import delete_old_interface
 from bot_apps.wordbank import add_task
 from config.config import load_config
+from parsing.other_parsing.existence_parser import existence_parser
 
 # Обозначение нужных классов
 router = Router()
@@ -408,17 +413,33 @@ async def add_finally_task(callback: CallbackQuery, state: FSMContext):
     # Проверка баланса перед тем, как добавить задание (чтоб юзер с нескольких интерфейсов не открыл меню добавления задания и не добавил сразу их несколько
     balance = await db.check_balance(int(callback.from_user.id))
     need = await define_price(data, data['number_users'])
+    # Ещё раз перепроверяем, что баланса хватает
     if balance < need:
         await callback.message.edit_text(add_task['fail_add_task'].format(round(balance, 2), round(need - balance, 2)),
                                          reply_markup=await not_money_keyboard_builder(balance_flag=True))
     else:
-        await db.add_new_task(int(callback.from_user.id),
-                              float(await define_price(data, data['number_users']) - await count_commission(data, data['number_users'])),
-                              await define_price(data, data['number_users']),
-                              float(await define_price(data) - await count_commission(data)),
-                              data['number_users'],
-                              data['setting_actions'],
-                              data['accepted'])
-        # Добавление всех необходимых данных для создания таска в базе данных
-        await callback.message.edit_text(add_task['add_task'].format(f"{data.get('number_users')}/{data.get('number_users')}"),
-                                         reply_markup=await add_task_keyboad_builder())
+        post_flag = True if data['accepted']['post_link'] else False  # Флаг, который укажет, ввёл юзер ссылку на профиль или на пост
+        await callback.message.edit_text(add_task['check_new_task'])
+        link = data['accepted']['post_link'] if post_flag else data['accepted']['profile_link']
+        what_check: Literal['profile', 'post'] = 'post' if post_flag else 'profile'
+        check_link: bool = await existence_parser(link, what_check)
+        # Если существование поста/аккаунта не было подтверждено
+        if not check_link:
+            text = add_task['not_existing_link'].format('поста' if post_flag else 'профиля',
+                                                        (f"Ссылка на профиль: {data['accepted']['profile_link']}\n" if data['accepted']['profile_link'] else '') +
+                                                        (f"Ссылка на пост: {data['accepted']['post_link']}\n" if data['accepted']['post_link'] else ''))
+            await callback.message.edit_text(text, reply_markup=await not_existing_link_builder(), disable_web_page_preview=True)
+        # Если всё ок и ссылки существуют
+        else:
+            task_id = await db.add_new_task(int(callback.from_user.id),
+                                            float(await define_price(data, data['number_users']) - await count_commission(data, data['number_users'])),
+                                            await define_price(data, data['number_users']),
+                                            float(await define_price(data) - await count_commission(data)),
+                                            data['number_users'],
+                                            data['setting_actions'],
+                                            data['accepted'])
+            # Добавление всех необходимых данных для создания таска в базе данных
+            await callback.message.edit_text(add_task['add_task'].format(f"{data.get('number_users')}/{data.get('number_users')}"),
+                                             reply_markup=await add_task_keyboad_builder())
+            # Стартуем размещение задания
+            await start_task(task_id)

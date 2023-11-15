@@ -55,18 +55,15 @@ async def process_open_main_menu(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(main_menu['main_text'],
                                          reply_markup=await main_menu_builder(callback.from_user.id))
 
-@router.message()
-async def process_open_main_menu(message: Message, state: FSMContext):
-    await sleep(5)
-    await message.answer('asdasdasd')
 
-# Обработчик любых ошибок (сюда будут приходить все ошибки, которые вылезли при принятии/отправке сообщений)
-@router.errors()
-async def sus(exception: ErrorEvent):
-    if isinstance(exception.exception, TelegramForbiddenError):
-        await they_banned.adding_they_blocked_users(exception.update.callback_query.from_user.id)
-    if exception.update.callback_query:
-        print(f"Ошибка от {exception.update.callback_query.from_user.id} (@{exception.update.callback_query.from_user.username}) в {exception.update.callback_query.message.date}; Сам текст ошибки: {exception.exception}")
-    else:
-        print(f"Ошибка от {exception.update.message.from_user.id} (@{exception.update.message.from_user.username}) в {exception.update.message.date}; Сам текст ошибки: {exception.exception}")
 
+# # Обработчик любых ошибок (сюда будут приходить все ошибки, которые вылезли при принятии/отправке сообщений)
+# @router.errors()
+# async def sus(exception: ErrorEvent):
+#     if isinstance(exception.exception, TelegramForbiddenError):
+#         await they_banned.adding_they_blocked_users(exception.update.callback_query.from_user.id)
+#     if exception.update.callback_query:
+#         print(f"Ошибка от {exception.update.callback_query.from_user.id} (@{exception.update.callback_query.from_user.username}) в {exception.update.callback_query.message.date}; Сам текст ошибки: {exception.exception}")
+#     else:
+#         print(f"Ошибка от {exception.update.message.from_user.id} (@{exception.update.message.from_user.username}) в {exception.update.message.date}; Сам текст ошибки: {exception.exception}")
+#

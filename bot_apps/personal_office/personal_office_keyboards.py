@@ -175,6 +175,19 @@ async def not_add_account_builder(attempt=1):
     return not_add_account.as_markup()
 
 
+# Клавиатура под сообщением о теневом бане
+async def shadow_ban_builder():
+    shadow_ban_kb = BD()
+    shadow_ban_kb.row(
+        IB(text=accounts['buttons']['new_account_button'],
+           callback_data='add_account'),
+        IB(text=accounts['buttons']['back_to_accounts_button'],
+           callback_data='back_to_accounts'),
+        IB(text=BACK_PERSONAL_ACCOUNT,
+           callback_data='back_to_personal_account'), width=1)
+    return shadow_ban_kb.as_markup()
+
+
 # Клавиатура после добавления нового аккаунта (под его статистикой)
 async def account_added_successfully_builder():
     account_added_successfully = BD()

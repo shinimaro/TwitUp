@@ -38,6 +38,15 @@ async def ok_button_builder(tasks_msg_id):
     return ok_button_kb.as_markup()
 
 
+# Кнопка для закрытия
+async def close_button():
+    close_kb = BD()
+    close_kb.row(
+        IB(text='Ok',
+           callback_data='close'))
+    return close_kb.as_markup()
+
+
 # Кнопка для закрытия таска, но его завершили другие пользователи
 async def ok_button_two_builder(tasks_msg_id):
     ok_button_kb = BD()

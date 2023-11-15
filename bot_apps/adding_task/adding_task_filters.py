@@ -16,7 +16,7 @@ async def is_correct_profile_link(link_name: str) -> bool | str:
     if link_name.startswith('https://twitter.com/'):
         is_correct = await correct_account(name=link_name)
         # Если в итоге функция вернула True
-        if is_correct == True:
+        if is_correct is True:
             return link_name
         # Если в итоге функция проверки вернула текст ошибки
         else:
@@ -26,7 +26,7 @@ async def is_correct_profile_link(link_name: str) -> bool | str:
     elif link_name[0] == '@':
         is_correct = await correct_account(name=link_name)
         # Если функция вернула True
-        if is_correct == True:
+        if is_correct is True:
             return f'https://twitter.com/{link_name[1:]}'
         # Если функция вернулся текст ошибки
         else:

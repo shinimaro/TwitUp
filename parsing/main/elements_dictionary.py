@@ -7,8 +7,14 @@ base_links = {
     # Страница, через которую предпочтительнее логиниться
     'login_page': 'https://twitter.com/i/flow/login',
     # Страница для просмотра всех наших пепещиков, но пока аккаунта нужного нет
-    'followers_page': f'https://twitter.com/{None}/followers'
+    'followers_page': f'https://twitter.com/{"testoreque19192"}/followers'
 }
+
+
+# Здесь находятся блоки, которые нужны для парсинга самого профиля пользователя
+profile_blocks = {
+    # Див блок, содержащий всю основную информацию профиля при его открыти
+    'all_profile_info': 'css-1dbjc4n r-1ifxtd0 r-ymttw5 r-ttdzmv'}
 
 
 
@@ -28,7 +34,7 @@ post_blocks = {
     'post_block': 'css-1dbjc4n r-1loqt21 r-18u37iz r-1ny4l3l r-1udh08x r-1qhn6m8 r-i023vh r-o7ynqc r-6416eg',
     # Достаёт ссылку на сам пост из блока с постом (находится там, где показывается время публикации поста)
     'time_publish': 'css-4rbku5 css-18t94o4 css-901oao r-14j79pv r-1loqt21 r-xoduu5 r-1q142lx r-1w6e6rj r-37j5jr r-a023e6 r-16dba41 r-9aw3ui r-rjixqe r-bcqeeo r-3s2u2q r-qvutc0',
-    # Достаёт юзернейм автора какого-либо поста
+    # Див в котором юзернейм автора какого-либо поста
     'username_author': 'css-901oao css-1hf3ou5 r-14j79pv r-18u37iz r-37j5jr r-1wvb978 r-a023e6 r-16dba41 r-rjixqe r-bcqeeo r-qvutc0',
     # Плашка, на которой написано "N пользователь сделал репост"
     'repost_tag': 'css-1dbjc4n r-1habvwh r-1wbh5a2 r-1777fci',
@@ -54,6 +60,7 @@ login_blocks = {
     'next_button': 'css-18t94o4 css-1dbjc4n r-sdzlij r-1phboty r-rs99b7 r-ywje51 r-usiww2 r-2yi16 r-1qi8awa r-1ny4l3l r-ymttw5 r-o7ynqc r-6416eg r-lrvibr r-13qz1uu',
     # Кнопка авторизации, появляющаяся после ввода пароля
     'login_button': '[data-testid="LoginForm_Login_Button"]'}
+
 
 # Здесь будут находиться другие различные блоки, не относящиеся к блокам, которые выше
 other_blocks = {

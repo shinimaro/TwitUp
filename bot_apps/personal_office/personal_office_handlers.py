@@ -1,6 +1,7 @@
 from asyncio import sleep
 
 from aiogram import Router, Bot, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
@@ -14,16 +15,20 @@ from bot_apps.personal_office.personal_office_keyboards import personal_account_
     keyboard_under_account_builder, account_delete_builder, back_button_builder, add_account_builder, \
     not_add_account_builder, account_added_successfully_builder, payment_keyboard_builder, \
     button_back_personal_office_builder, history_keyboard_builder, history_account_keyboard_builder, \
-    list_tasks_keyboards, pay_from_add_task_builder
+    list_tasks_keyboards, pay_from_add_task_builder, shadow_ban_builder
 from bot_apps.personal_office.personal_office_parsing import add_new_account
 from bot_apps.personal_office.personal_office_text import personal_account_text_builder, accounts_text_builder, \
     history_account_builder, tasks_list_text_builder
 from bot_apps.wordbank.wordlist import accounts, rules, statistic, payment, history_task
 from config import load_config
+from parsing.other_parsing.parsing_our_subscribers import AllOurUsers
+
+from parsing.other_parsing.parsing_shadowban import parsing_shadowban
 
 config = load_config()
 router = Router()
 bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
+all_our_users = AllOurUsers()
 router.callback_query.filter(IsBanned())
 router.message.filter(IsBanned())
 
@@ -190,15 +195,24 @@ async def adding_account(message: Message, state: FSMContext):
 @router.callback_query(F.data == 'confirm_add')
 async def process_check_account(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    await callback.message.edit_text(accounts['examination'].format(data.get('account')))
+    try:
+        await callback.message.edit_text(accounts['examination'].format(data.get('account')))
+    except TelegramBadRequest:
+        pass
     await sleep(2)
-    # check = await func() не забыть вписать условие, если функция вызвана из try_again_check_account
-    check = True
+    all_users = await all_our_users.get_all_our_users()
     # Если не удалось найти аккаунт в подписках нашего твиттер аккаунта
-    if not check:
+    print('Проверяю аккаунт ', data.get('account'), ' в этом списке ', all_users)
+    if not data.get('account') in all_users:
         await callback.message.edit_text(accounts['fail_check'].format(data.get('account')[1:]),
                                          reply_markup=await not_add_account_builder(),
                                          disable_web_page_preview=True)
+    # Если аккаунт найден, то бот открывает функция для его проверки на теневой бан
+    elif await parsing_shadowban(data.get('account')) is False:
+        await callback.message.edit_text(accounts['shadow_ban'].format(data.get('account')[1:]),
+                                         reply_markup=await shadow_ban_builder(),
+                                         disable_web_page_preview=True)
+
     # Если аккаунт найден в подписках
     else:
         # Функция, которая добавляет всю необходимую информацию в аккаунт (уже не добавляет, можно удалять её)
@@ -218,22 +232,23 @@ async def process_check_account(callback: CallbackQuery, state: FSMContext):
                                              reply_markup=await account_added_successfully_builder())
         await db.off_all_notifications(callback.from_user.id)
 
+
 # Пользователь зафейлил проверку, т.к. бот не нашёл его в подписках аккаунта
 @router.callback_query(F.data.startswith('try_again_'))
 async def try_again_check_account(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await callback.message.edit_text(accounts['examination'].format(data.get('account')))
-    await sleep(2)
-    # check_2 = await func()
-    check_2 = True
+    await sleep(1.5)
+    all_users = await all_our_users.get_all_our_users()
     # Если аккаунт не найден, то будет новое сообщение о том, что
-    if not check_2:
+    if not data.get('account') in all_users:
         await callback.message.edit_text(accounts['fail_check_again'].format(
             data.get('account')[1:] if callback.data[-1] != '3'
             else accounts['final_fail'].format(data.get('account')[1:])),
             reply_markup=await not_add_account_builder(int(callback.data[-1]) + 1),
             disable_web_page_preview=True)
-    # Если аккаунт найден, то бот открывает функция для его проверки
+
+    # Аккаунт найден в подписках
     else:
         await process_check_account(callback, state)
 

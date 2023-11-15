@@ -5,6 +5,7 @@ from aiogram import Bot
 
 from bot_apps.filters.limits_filters.callback_limit_filter import CallbackFilter
 from bot_apps.filters.limits_filters.message_limit_filter import MessageFilter
+from bot_apps.task_push.system.change_task_button import change_task_buttons
 from databases.database import db
 from bot_apps.adding_task.adding_task_keyboards import completed_task_keyboard_builder
 from bot_apps.task_push.task_push_keyboards import ok_button_two_builder
@@ -40,8 +41,10 @@ async def function_distributor_task_messages(tasks_msg_id):
 
 # Сама функция для удаления
 async def delete_message(info_dict, tasks_msg_id):
-    await db.change_priority_ignore_task(tasks_msg_id)
-    await db.update_status_on_fully_completed(tasks_msg_id)
+    await db.change_priority_ignore_task(tasks_msg_id)  # Понижение приоритета юзера
+    await db.update_status_on_fully_completed(tasks_msg_id)  # Изменить статус задания
+    await db.decrease_counter_execute(tasks_msg_id)  # Понизить счётчик отправленных заданий
+    await change_task_buttons(tasks_msg_id)  # Отключение кнопки, если юзер много игнорит тасков
     await bot.delete_message(
         chat_id=info_dict['telegram_id'],
         message_id=info_dict['message_id'])
@@ -49,11 +52,11 @@ async def delete_message(info_dict, tasks_msg_id):
 
 # Функция, для изменения текста
 async def edit_message(info_dict, tasks_msg_id):
-    if await db.check_status_checking(tasks_msg_id):
+    if await db.check_status_checking(tasks_msg_id):  # Если в этот момент задание проверялось
         text = task_completion['task_ended']
     else:
-        text = await chain_letter_builder(tasks_msg_id)
-    await db.change_priority_not_completed_task(tasks_msg_id)
+        text = await chain_letter_builder(tasks_msg_id)  # Если юзер просто его выполнял
+    await db.change_priority_not_completed_task(tasks_msg_id)  # Повышение рейтинга юзера
     await db.update_status_on_fully_completed(tasks_msg_id)
     await callback_filter(user_id=info_dict['telegram_id'])
     await bot.edit_message_text(

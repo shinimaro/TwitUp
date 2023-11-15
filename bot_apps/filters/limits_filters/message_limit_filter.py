@@ -6,7 +6,7 @@ from bot_apps.filters.limits_filters.base_filter import CommonFilter, PersonalMe
 
 # Отдельный фильтр для сообщений
 class MessageFilter(CommonFilter):
-    wait = 5
+    wait = 1
     counter = 0
     count_messages = 40
     count_personal_messages = 2

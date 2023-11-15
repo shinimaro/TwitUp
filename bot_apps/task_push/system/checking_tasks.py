@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+from typing import NoReturn
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -7,6 +8,8 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from bot_apps.filters.ban_filters.they_banned import TheyBanned
 from bot_apps.filters.limits_filters.callback_limit_filter import CallbackFilter
 from bot_apps.filters.limits_filters.message_limit_filter import MessageFilter
+from bot_apps.task_push.system.change_task_button import change_task_buttons
+from bot_apps.task_push.system.sending_tasks.completing_completion import WaitingTasks
 from databases.database import db
 from bot_apps.task_push.task_push_keyboards import clear_button_builder, accounts_for_task_builder, \
     complete_task_builder, get_link_comment_builder
@@ -19,6 +22,7 @@ bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
 callback_filter = CallbackFilter()
 message_filter = MessageFilter()
 they_banned = TheyBanned()
+
 
 # Функция, которая проверяет все запущенные задания на то, что они укладываются во времени
 async def check_task_message():
@@ -43,10 +47,9 @@ async def check_task_message():
 
 # Функция, сообщающая пользователю о том, что он не успел завершить задание
 async def edit_task_message(info_dict, tasks_msg_id):
-    # Если статус задания не находится в статусе проверки
-    if await db.check_status_checking(tasks_msg_id):
-        # Записываем дату удаления задания и статус
-        await db.update_status_on_scored(tasks_msg_id)
+    if await db.check_status_checking(tasks_msg_id):  # Если статус задания не находится в статусе проверки
+        await db.update_status_on_scored(tasks_msg_id)  # Записываем дату удаления задания и статус
+        await change_task_buttons(tasks_msg_id)  # Проверим обязательно, какой раз он уже забивает на таск
         try:
             await callback_filter(user_id=info_dict['telegram_id'])
             await bot.edit_message_text(
@@ -99,9 +102,12 @@ async def remind_edit_task_message(info_dict, tasks_msg_id):
         await db.update_reminder(tasks_msg_id)
 
 
-async def main_task_checker():
+async def main_task_checker() -> NoReturn:
+    waiting_tasks = WaitingTasks(15, 8 * 60)
     while True:
-        await asyncio.create_task(check_task_message())
-        await asyncio.sleep(10)
+        await waiting_tasks()
+        await check_task_message()
+
+
 
 
