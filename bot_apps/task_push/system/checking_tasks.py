@@ -36,13 +36,7 @@ async def check_task_message():
         # Если после начала выполнения таска осталось менее 8 минут, напоминаем пользователю о том, что осталось мало время
         elif 7.5 * 60 <= time_difference.total_seconds() <= 9 * 60 and not all_tasks_messages[key]['reminder']:
             tasks.extend([remind_edit_task_message(all_tasks_messages[key], int(key[13:]))])
-        # Если уже набралось 30 сообщений, то пока хватит
-        if len(tasks) == 30:
-            await asyncio.gather(*tasks)
-            tasks = []
-            await asyncio.sleep(0.5)
-    else:
-        await asyncio.gather(*tasks)
+    await asyncio.gather(*tasks)
 
 
 # Функция, сообщающая пользователю о том, что он не успел завершить задание

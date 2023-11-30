@@ -1,11 +1,17 @@
+import asyncio
 import datetime
+import math
 import re
-from typing import TypedDict
+import time
+from enum import Enum
+from typing import TypedDict, Literal, Union
 
 import asyncpg
 import pytz as pytz
 
 from config.config import load_config
+from dataclasses import dataclass
+
 
 config = load_config()
 account_active_day = 8
@@ -23,6 +29,218 @@ class WorkersInfo(TypedDict):
     comments: bool
 
 
+class WorkersRoundInfo(TypedDict):
+    telegram_id: int
+    circular_round: Literal[1, 2, 3]
+    level: str
+    available_accounts: int
+    priority: int
+    tasks_sent_today: int
+    subscriptions: bool
+    likes: bool
+    retweets: bool
+    comments: bool
+
+
+@dataclass(frozen=True, slots=True)
+class TaskInfo:
+    executions: int
+    completed_tasks: int
+    in_process: int
+
+
+class TaskStatus(Enum):
+    WAITING_START = 'подготовка задания к началу'
+    BULK_MESSAGING = 'идёт отбор пользователей'
+    DOP_BULK_MESSAGING = 'происходит дополнительная рассылка задания'
+    ACTIVE = 'задание выполняется'
+    COMPLETED = 'задание выполнено'
+    DELETED = 'задание удалено'
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveTasks:
+    task_number: int
+    date_of_creation: datetime.datetime
+    number_actions: int
+    status: TaskStatus
+    completion_percentage: int | float
+
+
+@dataclass(frozen=True, slots=True)
+class LinkAction:
+    account_link: str | None
+    post_link: str | None
+
+
+class CommentParameter(TypedDict):
+    words_count: int | None
+    tags_count: int | None
+    words_tags: int | None
+    note: str | None
+    english: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ActionsInfo:
+    type_action: dict[Literal['subscriptions', 'likes', 'retweets', 'comments'], Union[LinkAction.post_link, LinkAction.account_link]]
+    comment_paremeters: CommentParameter | None
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveTask:
+    task_number: int
+    date_of_creation: datetime.datetime
+    status: TaskStatus
+    actions_info: ActionsInfo
+    executions: int
+    number_completed: int
+    completion_percent: int
+    doing_now: int
+    total_pay: int | float
+    remaining_balance: int | float
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryTask:
+    task_number: int
+    date_of_creation: datetime.datetime
+    date_of_completed: datetime.datetime
+    completion_in: datetime.timedelta
+    status: TaskStatus
+    actions_info: ActionsInfo
+    executions: int
+    completed_task: int
+    completion_percent: int
+    total_pay: int | float
+    fines: int | float
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryTasks:
+    task_number: int
+    date_of_creation: datetime.datetime
+    date_of_completed: datetime.datetime
+    completion_in: datetime.timedelta
+    status: TaskStatus
+    completed_task: int
+    executions: int
+    completion_percentage: int | float
+    total_pay: int | float
+    fines: int | float
+    type_action: dict[Literal['subscriptions', 'likes', 'retweets', 'comments'], Union[LinkAction.post_link, LinkAction.account_link]] | ActionsInfo
+
+
+@dataclass(frozen=True, slots=True)
+class InfoIncreasedExecutions:
+    executions: int
+    number_completed: int
+    price: int | float
+    balance: int | float
+
+
+@dataclass(frozen=True, slots=True)
+class RemainingTaskBalance:
+    status: str
+    number_rewards: int | float
+    number_workers: int
+    balance_task: int | float
+    number_sent_users: int
+    remaining_task_balance: int | float
+
+
+@dataclass(frozen=True, slots=True)
+class FinesInfo:
+    count_fines: int
+    last_message: datetime.timedelta
+
+
+@dataclass(frozen=True, slots=True)
+class FineInfo:
+    fines_id: int
+    already_bought: float
+
+
+@dataclass()
+class AllFinesInfo:
+    fines_info: FinesInfo
+    fines_list: list[FineInfo]
+
+
+@dataclass(frozen=True, slots=True)
+class AdminPanelMainInfo:
+    now_time: datetime.datetime
+    admin_balance: float
+    received_today: float
+    spent_on_task: float
+    refund_today: float
+    earned_by_workers: float
+    new_users: int
+    new_accounts: int
+    new_tasks: int
+    sended_tasks: int
+    completed_tasks: int
+    sended_fines: int
+
+
+@dataclass(frozen=True, slots=True)
+class UsersList:
+    tg_id: int
+    username: str
+    registration_date: datetime.datetime
+    priority: int | None
+    level: Literal['vacationers', 'prelim', 'main', 'challenger', 'champion'] | None
+    number_accounts: int
+    number_completed: int
+    number_add_tasks: int
+    number_active_tasks: int
+    number_fines: int
+
+
+@dataclass()
+class UserAllInfo:
+    telegram_id: int
+    telegram_name: str
+    date_join: datetime.datetime
+    user_status: str
+    balance: float
+    count_referrals: int
+    inviting_user: str | None
+    total_payment: float
+    total_earned: float
+    spent_on_tasks: float
+    total_refund: float
+    total_paid: float
+    number_tasks: int
+    number_active_tasks: int
+    sum_collected_fines: float
+    sum_uncollected_fines: float
+    priority: int
+    level: Literal['vacationers', 'prelim', 'main', 'challenger', 'champion' 'beginner']
+    active_accounts: int
+    total_sent_tasks: int
+    total_finished_tasks: int
+    total_unfinished_tasks: int
+    number_refusals_from_tasks: int
+    number_hiding_tasks: int
+    number_unviewed_tasks: int
+    number_scored_tasks: int
+    number_tasks_active_now: list[int]
+    number_fines: int
+    number_active_fines: int
+    fines_on_priority: int
+    sum_of_fines: float
+
+
+@dataclass(frozen=True, slots=True)
+class SentTasksInfo:
+    task_id: int
+    status: str
+    offer_time: datetime.datetime
+    complete_time: datetime.datetime | None
+
+
+
 class Database:
     def __init__(self):
         self.host = config.database.db_host
@@ -36,7 +254,8 @@ class Database:
             host=self.host,
             database=self.database,
             user=self.user,
-            password=self.password)
+            password=self.password,
+            max_size=30)
 
     async def disconnect(self):
         if self.pool:
@@ -58,6 +277,7 @@ class Database:
                     await connection.execute('INSERT INTO users(telegram_id, telegram_name) VALUES ($1, $2)', tg_id, tg_name)
                     await connection.execute('INSERT INTO user_notifications(telegram_id) VALUES ($1)', tg_id)
                     await connection.execute('INSERT INTO reviews(telegram_id) VALUES ($1)', tg_id)
+                    await connection.execute('INSERT INTO date_join(telegram_id) VALUES ($1)', tg_id)
                     # Создаём ему реферальный кабинет и записываем рефовода, если он есть
                     if link:
                         await connection.execute('INSERT INTO referral_office(telegram_id, inviter, date_of_invitation) VALUES ($1, (SELECT telegram_id FROM referral_office WHERE promocode = $2), NOW())', tg_id, link)
@@ -72,9 +292,7 @@ class Database:
     # Получить главный интерфейс
     async def get_main_interface(self, tg_id):
         async with self.pool.acquire() as connection:
-            main_interface = await connection.fetchrow('SELECT message_id FROM main_interface WHERE telegram_id = $1', tg_id)
-            if main_interface:
-                return main_interface['message_id']
+            return (await connection.fetchrow('SELECT message_id FROM main_interface WHERE telegram_id = $1', tg_id))['message_id']
 
     # Обновить главное сообщение
     async def update_main_interface(self, tg_id, message_id):
@@ -172,8 +390,8 @@ class Database:
                 if balance_account and balance_account['account_balance'] > 0:
                     await connection.execute("UPDATE users SET balance = balance + (SELECT account_balance FROM accounts WHERE account_name = $2) WHERE telegram_id = $1", tg_id, acc_name)
                     await connection.execute("UPDATE accounts SET account_balance = 0 WHERE account_name = $2 AND telegram_id = $1", tg_id, acc_name)
-                    balance_user = await connection.fetchrow("SELECT balance FROM users WHERE telegram_id = $1", tg_id)
-                    return balance_account['account_balance'], balance_user['balance']
+                    balance_user = await self.check_balance(tg_id)
+                    return balance_account['account_balance'], balance_user
                 return None, None
 
     # +
@@ -222,6 +440,11 @@ class Database:
         async with self.pool.acquire() as connection:
             result = await connection.fetchrow('SELECT all_notifications FROM user_notifications WHERE telegram_id = $1', tg_id)
             return result['all_notifications']
+
+    # Узнать, есть ли хотя бы 1 задание у пользователя (не удалённое)
+    async def check_tasks(self, tg_id):
+        async with self.pool.acquire() as connection:
+            return bool(await connection.fetchval('SELECT task_id FROM tasks WHERE telegram_id = $1 and deleted_history = False', tg_id))
 
     # Узнать, включен ли "приём заданий" и есть ли добавленные аккаунты у пользователя
     async def get_all_notifications_and_account(self, tg_id):
@@ -397,7 +620,10 @@ class Database:
         async with self.pool.acquire() as connection:
             uncollected_balance = await connection.fetchrow('SELECT SUM(account_balance) as balance FROM accounts WHERE telegram_id = $1 and deleted = False', tg_id)
             if uncollected_balance['balance'] and uncollected_balance['balance'] > 0:
-                return int(uncollected_balance['balance']) if uncollected_balance['balance'].is_integer() else round(uncollected_balance['balance'], 2)
+                return self._round_number(uncollected_balance['balance'])
+
+    def _round_number(self, number):
+        return int(number) if number.is_integer() else round(number, 2)
 
     # Собираем сразу все награды со всех аккаунтов
     async def collection_of_all_awards(self, tg_id):
@@ -464,9 +690,9 @@ class Database:
                     'count_people': count_people.get('count_people', 0) if count_people else 0,
                     'active_people': active_people.get('active_people', 0) if active_people else 0,
                     'new_people_in_month': new_people_in_month.get('new_people_in_month', 0) if new_people_in_month else 0,
-                    'earned_by_friends': int(earned_by_friends.get('earned_by_friends', 0)) if float(earned_by_friends.get('earned_by_friends', 0)).is_integer() else round(earned_by_friends.get('earned_by_friends', 0), 2),
-                    'sum_earned': int(sum_earned.get('sum_earned', 0)) if float(sum_earned.get('sum_earned', 0)).is_integer() else round(sum_earned.get('sum_earned', 0), 2),
-                    'collected_from_promocode': int(collected_from_promocode.get('total_earned', 0)) if float(collected_from_promocode.get('total_earned', 0)).is_integer() else round(collected_from_promocode.get('total_earned', 0), 2),
+                    'earned_by_friends': self._round_number(earned_by_friends.get('earned_by_friends', 0)),
+                    'sum_earned': self._round_number(sum_earned.get('sum_earned', 0)),
+                    'collected_from_promocode': self._round_number(collected_from_promocode.get('total_earned', 0))
                 }
                 return affiliate_statistics_dict
 
@@ -518,8 +744,8 @@ class Database:
                 await connection.execute('UPDATE referral_office SET total_earned = total_earned + current_balance WHERE telegram_id = $1', tg_id)
                 await connection.execute('UPDATE users SET balance = balance + (SELECT current_balance FROM referral_office WHERE telegram_id = $1) WHERE telegram_id = $1', tg_id)
                 await connection.execute('UPDATE referral_office SET current_balance = 0 WHERE telegram_id = $1', tg_id)
-                balance_user = await connection.fetchrow('SELECT balance FROM users WHERE telegram_id = $1', tg_id)
-                return balance_collection['current_balance'], balance_user['balance']
+                balance_user = await self.check_balance(tg_id)
+                return balance_collection['current_balance'], balance_user
 
     # Пользователь собирает часть реферальных наград
     async def collect_part_of_referral_rewards(self, tg_id, part):
@@ -528,8 +754,7 @@ class Database:
                 await connection.execute('UPDATE referral_office SET total_earned = total_earned + $2 WHERE telegram_id = $1', tg_id, part)
                 await connection.execute('UPDATE users SET balance = balance + $2 WHERE telegram_id = $1', tg_id, part)
                 await connection.execute('UPDATE referral_office SET current_balance = current_balance - $2 WHERE telegram_id = $1', tg_id, part)
-                balance_user = await connection.fetchrow('SELECT balance FROM users WHERE telegram_id = $1', tg_id)
-                return balance_user['balance']
+                return await self.check_balance(tg_id)
 
     # +
     # Вытаскиваем данные для статистики аккаунта
@@ -590,15 +815,19 @@ class Database:
             check = await connection.fetchrow('SELECT telegram_id FROM payments WHERE telegram_id = $1', tg_id)
             # Если есть отметка в истории о пополнении аккаунта
             if check:
-                balance = await connection.fetchrow('SELECT balance FROM users WHERE telegram_id = $1', tg_id)
-                return balance['balance']
+                return await self.check_balance(tg_id)
             return False
 
     # Достать баланс пользователя
     async def check_balance(self, tg_id):
         async with self.pool.acquire() as connection:
-            balance = await connection.fetchrow('SELECT balance FROM users WHERE telegram_id = $1', tg_id)
-            return balance['balance']
+            balance = (await connection.fetchrow('SELECT balance FROM users WHERE telegram_id = $1', tg_id))['balance']
+            return self._round_number(balance)
+
+    # Достать tg_id создателя задания
+    async def get_telegram_id_from_tasks(self, task_id):
+        async with self.pool.acquire() as connection:
+            return (await connection.fetchrow('SELECT telegram_id FROM tasks WHERE task_id = $1', task_id))['telegram_id']
 
     # Проверка того, хватит ли у нас воркеров для того, чтобы принять задание пользователя
     async def feasibility_check(self, tg_id, data):
@@ -686,7 +915,7 @@ class Database:
         async with self.pool.acquire() as connection:
             async with connection.transaction():
                 # Вся информация о таске
-                task_info = await connection.fetch("SELECT tasks.price, tasks.status, actions.type_task, parameters.parameter_id FROM tasks_messages  INNER JOIN tasks USING(task_id) INNER JOIN actions USING(task_id) LEFT JOIN parameters USING(parameter_id) WHERE task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1 AND tasks.deleted <> True)", tasks_msg_id)
+                task_info = await connection.fetch("SELECT tasks.price, tasks.status, actions.type_task, parameters.parameter_id FROM tasks_messages  INNER JOIN tasks USING(task_id) INNER JOIN actions USING(task_id) LEFT JOIN parameters USING(parameter_id) WHERE task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1 AND tasks.status NOT IN ('completed', 'deleted'))", tasks_msg_id)
                 # Если задание было завершено, удалено
                 if not task_info:
                     return False
@@ -812,7 +1041,7 @@ class Database:
             executions = await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = $1', task_id)
             # completed = round(completed.get('count_complete', 0) / 5) * 5
             # return {'count_complete': completed, 'price': price['price'] / 100 * (100 - config.task_price.commission_percent)}
-            return {'count_complete': round(executions['executions'] / 5) * 5, 'price': price['price'] if price["price"].is_integer() else round(price["price"], 2)}
+            return {'count_complete': round(executions['executions'] / 5) * 5, 'price': self._round_number(price["price"])}
 
     # Получить message_id высланного задания
     async def get_task_message_id(self, tasks_msg_id):
@@ -883,7 +1112,132 @@ class Database:
                 # Изменение его круга, если это необходимо
                 await self.change_in_circle(tg_id)
                 # Вернуть итоговое кол-во наград, которое он получил
-                return int(reward) if reward.is_integer() else round(reward, 2)
+                return self._round_number(reward)
+
+    # Узнать, есть ли активные таски у юзера
+    async def get_count_active_tasks(self, tg_id):
+        async with self.pool.acquire() as connection:
+            return (await connection.fetchrow("SELECT COUNT(task_id) as active_tasks FROM tasks WHERE telegram_id = $1 and status NOT IN('completed', 'deleted')", tg_id))['active_tasks']
+
+    # Получить общее кол-во созданных заданий юзера, не считая удалённые
+    async def get_count_all_tasks(self, tg_id):
+        async with self.pool.acquire() as connection:
+            return (await connection.fetchrow("SELECT COUNT(task_id) as all_tasks FROM tasks WHERE telegram_id = $1 and not deleted_history", tg_id))['all_tasks']
+
+    # Получить кол-во тасков, хранящихся в истории
+    async def get_count_task_on_history(self, tg_id):
+        async with self.pool.acquire() as connection:
+            return (await connection.fetchrow("SELECT COUNT(task_id) as history_tasks FROM tasks WHERE telegram_id = $1 and not deleted_history and status IN ('completed', 'deleted')", tg_id))['history_tasks']
+
+        # Получить информацию о типах действий и параметры комментария
+    async def get_actions_info(self, task_id) -> ActionsInfo:
+        async with self.pool.acquire() as connection:
+            type_actions = await connection.fetch("SELECT type_task FROM actions WHERE task_id = $1", task_id)
+            link_action: LinkAction = await self.get_links_on_task(task_id)
+            return ActionsInfo(type_action={action['type_task']: (
+                link_action.account_link if action['type_task'] == 'subscriptions' else link_action.post_link) for
+                                            action in type_actions}, comment_paremeters=await self.get_comment_parameters(task_id))
+
+    # Изменение статуса на удалённое
+    async def change_task_status_to_deleted(self, task_id):
+        async with self.pool.acquire() as connection:
+            await connection.execute("UPDATE tasks SET status = 'deleted' WHERE task_id = $1", task_id)
+
+    # Получить активные таски с некоторой информацией
+    async def get_active_tasks_inforamtions(self, tg_id) -> dict[int, ActiveTasks]:
+        async with self.pool.acquire() as connection:
+            active_tasks = await connection.fetch("SELECT task_id, tb_2.task_number, date_of_creation, COUNT(type_task) as number_actions, status, executions, COALESCE(tb_1.completed_task, 0) as completed_task FROM tasks RIGHT JOIN actions USING(task_id) LEFT JOIN (SELECT task_id, COUNT(tasks_msg_id) as completed_task FROM tasks RIGHT JOIN tasks_messages USING(task_id) WHERE tasks_messages.status = 'completed' GROUP BY task_id) as tb_1 USING(task_id) LEFT JOIN (SELECT task_id, ROW_NUMBER() OVER (ORDER BY date_of_creation) as task_number FROM tasks ORDER BY date_of_creation) as tb_2 USING (task_id) WHERE telegram_id = $1 AND tasks.status not IN ('completed', 'deleted') GROUP BY 1, 2, 3, 5, 6, 7 ORDER BY date_of_creation DESC;", tg_id)
+            return {task['task_id']: ActiveTasks(
+                task_number=task['task_number'],
+                date_of_creation=task['date_of_creation'].astimezone(pytz.timezone('Europe/Moscow')),
+                number_actions=task['number_actions'],
+                status=getattr(TaskStatus, task['status'].upper()),
+                completion_percentage=self._round_number(task['completed_task'] / (task['executions'] / 100))) for task in active_tasks}
+
+    # Получить все таски из истории
+    async def get_history_tasks_informations(self, tg_id) -> dict[int, HistoryTasks]:
+        async with self.pool.acquire() as connection:
+            history_tasks = await connection.fetch("SELECT task_id, tb_2.task_number, price, date_of_creation, date_of_completed, date_of_completed - date_of_creation as completion_in, COALESCE(ttp.total_pay, 0) + COALESCE(sum_fines, 0) as total_pay, status, executions, COALESCE(tb_1.completed_tasks, 0) as completed_task, COALESCE(sum_fines, 0) as sum_fines, BOOL_OR(CASE WHEN taskus.type_task = 'subscriptions' THEN True ELSE False END) as subscriptions, BOOL_OR(CASE WHEN taskus.type_task = 'likes' THEN True ELSE False END) as likes, BOOL_OR(CASE WHEN taskus.type_task = 'retweets' THEN True ELSE False END) as retweets, BOOL_OR(CASE WHEN taskus.type_task = 'comments' THEN True ELSE False END) as comments, MAX(CASE WHEN taskus.link_action NOT LIKE '%/status/%' THEN taskus.link_action ELSE Null END) as profile_link, MAX(CASE WHEN taskus.link_action LIKE '%/status/%' THEN taskus.link_action ELSE Null END) as post_link FROM tasks LEFT JOIN (SELECT task_id, COUNT(unique_id) as completed_tasks FROM completed_tasks GROUP BY 1) as tb_1 USING(task_id) LEFT JOIN (SELECT task_id, ROW_NUMBER() OVER (ORDER BY date_of_creation) as task_number FROM tasks ORDER BY date_of_creation) as tb_2 USING(task_id) LEFT JOIN (SELECT task_id, SUM(number_awards) as sum_fines FROM fines JOIN often_deleted USING(fines_id) GROUP BY task_id) as fines USING(task_id) LEFT JOIN (SELECT task_id, SUM(final_reward) as total_pay FROM completed_tasks GROUP BY task_id) as ttp USING(task_id) JOIN (SELECT task_id, type_task, link_action FROM actions) as taskus USING(task_id) WHERE telegram_id = $1 AND tasks.status IN ('completed', 'deleted') AND tasks.deleted_history = False GROUP BY task_id, task_number, date_of_creation, status, executions, completed_task, date_of_completed, completion_in, sum_fines, total_pay ORDER BY date_of_creation, price DESC;", tg_id)
+            history_dict = {}
+            for task in history_tasks:
+                history_dict[task['task_id']] = HistoryTasks(
+                        task_number=task['task_number'],
+                        date_of_creation=task['date_of_creation'],
+                        date_of_completed=task['date_of_completed'],
+                        completion_in=task['completion_in'],
+                        status=getattr(TaskStatus, task['status'].upper()),
+                        completed_task=task['completed_task'],
+                        executions=task['executions'],
+                        completion_percentage=self._round_number(task['completed_task'] / (task['executions'] / 100)),
+                        total_pay=self._round_number(task['total_pay']),
+                        fines=task['sum_fines'],
+                        type_action=self._fill_actions_dict(task))
+            return history_dict
+
+    # Колхозная обработка для создания словаря с действиями
+    def _fill_actions_dict(self, task_info: dict):
+        actions_list = ['subscriptions', 'likes', 'retweets', 'comments']
+        actions_dict = {}
+        for key, value in task_info.items():
+            if key in actions_list and value:
+                actions_dict[key] = task_info['profile_link'] if key == 'subscriptions' else task_info['post_link']
+
+        return ActionsInfo(type_action=actions_dict,
+                           comment_paremeters=None)
+
+
+    # Получить всю информацию об активном задании
+    async def get_active_task_info(self, task_id) -> ActiveTask:
+        async with self.pool.acquire() as connection:
+            active_task = await connection.fetchrow("SELECT tb_2.task_number, date_of_creation, status, executions, COALESCE((SELECT COUNT(*) FROM completed_tasks WHERE task_id = $1), 0) as completed_tasks, COALESCE(tb_1.doing_now, 0) as doing_now, tb_3.total_pay, tb_3.remaining_balance FROM tasks LEFT JOIN (SELECT task_id, COUNT(*) as doing_now FROM tasks_messages WHERE task_id = $1 AND status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'сhecking') GROUP BY 1) as tb_1 USING(task_id) LEFT JOIN (SELECT task_id, ROW_NUMBER() OVER (ORDER BY date_of_creation) as task_number FROM tasks ORDER BY date_of_creation) as tb_2 USING(task_id) JOIN (SELECT task_id, price * COALESCE((SELECT COUNT(*) FROM completed_tasks WHERE task_id = $1), 0) as total_pay, (balance_task - (price * COALESCE((SELECT COUNT(*) FROM completed_tasks WHERE task_id = $1), 0))) as remaining_balance FROM tasks WHERE task_id = $1) as tb_3 USING(task_id) WHERE task_id = $1;", task_id)
+            return ActiveTask(
+                task_number=active_task['task_number'],
+                date_of_creation=active_task['date_of_creation'].astimezone(pytz.timezone('Europe/Moscow')),
+                status=getattr(TaskStatus, active_task['status'].upper()),
+                actions_info=await self.get_actions_info(task_id),
+                executions=active_task['executions'],
+                number_completed=active_task['completed_tasks'],
+                completion_percent=self._round_number(active_task['completed_tasks'] / (active_task['executions'] / 100)),
+                doing_now=active_task['doing_now'],
+                total_pay=self._round_number(active_task['total_pay']),
+                remaining_balance=self._round_number(active_task['remaining_balance']))
+
+    # Получить всю информацию о таске из истории
+    async def get_history_task_info(self, task_id) -> HistoryTask:
+        async with self.pool.acquire() as connection:
+            history_task = await connection.fetchrow("SELECT tsk_n.task_number, date_of_creation, date_of_completed, date_of_completed - date_of_creation as completion_in, status, COALESCE(ttp.total_pay, 0) + COALESCE(sum_fines, 0) as total_pay, executions, COALESCE(tsk_cmp.completed_task, 0) as completed_task, sum_fines FROM tasks JOIN (SELECT task_id, ROW_NUMBER() OVER (ORDER BY date_of_creation) as task_number FROM tasks ORDER BY date_of_creation) as tsk_n USING(task_id) LEFT JOIN (SELECT task_id, SUM(number_awards) as sum_fines FROM fines JOIN often_deleted USING(fines_id) GROUP BY task_id) as fines USING(task_id) LEFT JOIN (SELECT task_id, SUM(final_reward) as total_pay FROM completed_tasks GROUP BY task_id) as ttp USING(task_id) LEFT JOIN (SELECT task_id, COUNT(unique_id) as completed_task FROM completed_tasks GROUP BY 1) as tsk_cmp USING(task_id) WHERE task_id = $1", task_id)
+            return HistoryTask(
+                task_number=history_task['task_number'],
+                date_of_creation=history_task['date_of_creation'],
+                date_of_completed=history_task['date_of_completed'],
+                completion_in=history_task['completion_in'],
+                status=getattr(TaskStatus, history_task['status'].upper()),
+                actions_info=await self.get_actions_info(task_id),
+                executions=history_task['executions'],
+                completed_task=history_task['completed_task'],
+                completion_percent=self._round_number(history_task['completed_task'] / (history_task['executions'] / 100)),
+                total_pay=self._round_number(history_task['total_pay']),
+                fines=history_task['sum_fines'])
+
+
+    # Получить ссылки на действия в таске
+    async def get_links_on_task(self, task_id) -> LinkAction:
+        async with self.pool.acquire() as connection:
+            links = await connection.fetch("SELECT link_action FROM actions WHERE task_id = $1", task_id)
+            account = next((link['link_action'] for link in links if '/status/' not in link['link_action']), None)
+            post = next((link['link_action'] for link in links if '/status/' in link['link_action']), None)
+            return LinkAction(account_link=account, post_link=post)
+
+    # Получить информацию о комментарии
+    async def get_comment_parameters(self, task_id) -> CommentParameter | None:
+        async with self.pool.acquire() as connection:
+            actions = await connection.fetchrow("SELECT parameter_id, words_count, tags_count, words_tags, note, english FROM actions LEFT JOIN parameters USING(parameter_id) WHERE task_id = $1 AND parameter_id is not Null", task_id)
+            if actions:
+                check_parameter = {'words_count': None, 'tags_count': None, 'words_tags': None, 'english': None, 'note': None}
+                return {parameter: actions[str(parameter)] for parameter in check_parameter.keys()}
+            else:
+                return None
+
 
     # Выплата штрафов юзера
     async def payment_of_fines(self, reward, tg_id):
@@ -950,6 +1304,11 @@ class Database:
                 if result['count_completed'] <= 0 or not result['count_completed']:
                     return True
                 return False
+
+    # Удалить задание из истории
+    async def del_task_from_history(self, task_id):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE tasks SET deleted_history = True WHERE task_id = $1', task_id)
 
     # Функция, добавляющая время удаления сообщения, а также статус и снижение актива
     async def del_and_change_status_task(self, tasks_msg_id, no_first_execution=False):
@@ -1121,6 +1480,11 @@ class Database:
         async with self.pool.acquire() as connection:
             await connection.execute("UPDATE tasks_messages SET status = 'deleted' WHERE tasks_msg_id = $1", tasks_msg_id)
 
+    # Поменять статус задания на скрытый
+    async def add_hidden_status(self, tasks_msg_id):
+        async with self.pool.acquire() as connection:
+            await connection.execute("UPDATE tasks_messages SET status = 'hidden' WHERE tasks_msg_id = $1", tasks_msg_id)
+
     # Запись в базу даных о скрытии таска
     async def add_note_about_hiding(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
@@ -1143,6 +1507,24 @@ class Database:
             for i in all_tasks:
                 all_tasks_dict[f"tasks_msg_id_{i['tasks_msg_id']}"] = {'telegram_id': i['telegram_id'], 'message_id': i['message_id'], 'start_time': i['start_time'].astimezone(), 'reminder': i['reminder'], 'status': i['status'], 'account': i['account_name']}
             return all_tasks_dict
+
+    # Раздача части наград от части задания воркерам
+    async def distribution_some_awards(self, task_id, number_awards: int):
+        async with self.pool.acquire() as connection:
+            # Подсчёт наград на 1 воркера
+            number_workers = (await connection.fetchrow("SELECT COUNT(*) as number_workers FROM tasks_messages WHERE status IN ('offer', 'offer_more', 'completed', 'refuse', 'refuse_late', 'hidden', 'deleted') AND task_id = $1", task_id))['number_workers']
+            if number_workers > 0:
+                award = number_awards / number_workers
+                await connection.execute("UPDATE users SET balance = balance + $2 WHERE telegram_id IN (SELECT telegram_id FROM tasks_messages WHERE status IN ('offer', 'offer_more', 'completed', 'refuse', 'refuse_late', 'hidden', 'deleted') AND task_id = $1 GROUP BY 1)", task_id, award)
+
+    # Запись штрафа в бд
+    async def penalty_for_frequent_deletion(self, task_id, number_awards):
+        async with self.pool.acquire() as connection:
+            tg_id = await self.get_telegram_id_from_tasks(task_id)
+            fines_id = await connection.fetchval("INSERT INTO fines(telegram_id, fines_type, task_id) VALUES($1, 'often_deleted', $2) RETURNING fines_id", tg_id, task_id)
+            await connection.execute("INSERT INTO often_deleted(fines_id, number_awards) VALUES ($1, $2)", fines_id, number_awards)
+
+    # Запись в бд о рефанде средств
 
     # Обновление статуса задания на "воркер забил, либо забыл"
     async def update_status_on_scored(self, tasks_msg_id):
@@ -1225,7 +1607,8 @@ class Database:
         async with self.pool.acquire() as connection:
             async with connection.transaction():
                 # Создание основы для таска
-                task_id = await connection.fetchval('INSERT INTO tasks(telegram_id, balance_task, price, executions) VALUES ($1, $2, $3, $4) RETURNING task_id', tg_id, balance_task, price, executions)
+                task_id = await connection.fetchval("INSERT INTO tasks(telegram_id, balance_task, price, executions, status) VALUES ($1, $2, $3, $4, 'waiting_start') RETURNING task_id", tg_id, balance_task, price, executions)
+                await connection.execute("INSERT INTO payments_tasks(task_id, price_id) VALUES ($1, (SELECT prices_id FROM prices_actions ORDER BY date_added DESC LIMIT 1))", task_id)
                 # Снятие с пользователя средств и перевод на счёт баланса таска
                 await connection.execute('UPDATE users SET balance = balance - $2 WHERE telegram_id = $1', tg_id, withdrawal_amount)
                 # Заполнение всех типов заданий
@@ -1255,6 +1638,21 @@ class Database:
                         await connection.execute('INSERT INTO actions(task_id, type_task, link_action) VALUES ($1, $2, $3)', task_id, task, accepted['post_link'])
                 return task_id
 
+    # Смена статуса задания на первоначальную рассылку
+    async def change_task_status_on_bulk_messaging(self, task_id):
+        async with self.pool.acquire() as connection:
+            await connection.execute("UPDATE tasks SET status = 'bulk_messaging' WHERE task_id = $1", task_id)
+
+    # Смена статуса задания на активный
+    async def change_status_task_on_active(self, task_id):
+        async with self.pool.acquire() as connection:
+            await connection.execute("UPDATE tasks SET status = 'active' WHERE task_id = $1", task_id)
+
+    # Смена статуса задания на "дополнительная рассылка"
+    async def change_status_task_on_dop_bulk_messaging(self, task_id):
+        async with self.pool.acquire() as connection:
+            await connection.execute("UPDATE tasks SET status = 'dop_bulk_messaging' WHERE task_id = $1", task_id)
+
     # Получить telegram_id создателя таска
     async def get_id_founder_task(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
@@ -1275,6 +1673,10 @@ class Database:
         async with self.pool.acquire() as connection:
             executions = await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1)', tasks_msg_id)
             return executions['executions']
+
+    async def get_executions_from_task(self, task_id):
+        async with self.pool.acquire() as connection:
+            return (await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = $1', task_id))['executions']
 
     # Проверка статуса задания и отметка его, как завершённого
     async def completed_task_status(self, tasks_msg_id):
@@ -1313,11 +1715,21 @@ class Database:
     async def get_prices(self):
         async with self.pool.acquire() as connection:
             prices = await connection.fetchrow('SELECT subscriptions, likes, retweets, comments FROM prices_actions ORDER BY prices_id DESC LIMIT 1')
-            prices_dict = {'subscriptions': int(prices['subscriptions']) if prices['subscriptions'].is_integer() else prices['subscriptions'],
-                           'likes': int(prices['likes']) if prices['likes'].is_integer() else prices['likes'],
-                           'retweets': int(prices['retweets']) if prices['retweets'].is_integer() else prices['retweets'],
-                           'comments': int(prices['comments']) if prices['comments'].is_integer() else prices['comments']}
+            prices_dict = {'subscriptions': self._round_number(prices['subscriptions']),
+                           'likes': self._round_number(prices['likes']),
+                           'retweets': self._round_number(prices['retweets']),
+                           'comments': self._round_number(prices['comments'])}
             return prices_dict
+
+    # Обновить все лимиты пользователей
+    async def update_limits_users(self):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE tasks_distribution SET task_sent_today = 0')
+
+    # Обновить все лимиты аккаунтов
+    async def update_limits_accounts(self):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE accounts SET account_limits = 0')
 
     # Достать словарь с лимитами на задания в день
     async def get_limits_dict(self):
@@ -1353,32 +1765,30 @@ class Database:
             # 2. Он не выполняет в данный момент похожее задание и у него есть свободные аккаунты, которые могут выполнить это задание
             # 3. Это не новичок
             # 4. У него уже не висит 3 задания, к которым он даже не приторнуля, ну и вроде всё, может ещё какие-то условия, хз
-            all_workers_info: list[WorkersInfo] = await connection.fetch('''SELECT telegram_id, level, priority, COUNT(account_name) as available_accounts, tasks_sent_today, subscriptions, likes, retweets, comments FROM (SELECT user_notifications.telegram_id, level, priority, accounts.account_name, COUNT(CASE WHEN statistics.offer_time >= date_trunc('day', current_timestamp AT TIME ZONE 'Europe/Moscow') THEN 1 END) as tasks_sent_today, subscriptions, likes, retweets, comments FROM user_notifications JOIN tasks_distribution USING(telegram_id) LEFT JOIN tasks_messages USING(telegram_id) LEFT JOIN statistics USING(tasks_msg_id) RIGHT JOIN accounts ON user_notifications.telegram_id = accounts.telegram_id WHERE user_notifications.telegram_id IN (SELECT telegram_id FROM users JOIN user_notifications USING(telegram_id) JOIN tasks_distribution USING(telegram_id) WHERE telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) AND user_notifications.all_notifications = True AND tasks_distribution.booking = False) AND accounts.account_name IN (SELECT account_name FROM accounts WHERE account_name NOT IN (SELECT completed_tasks.account_name FROM actions JOIN tasks USING(task_id) JOIN completed_tasks USING(task_id) WHERE (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND account_name NOT IN (SELECT account_name FROM actions JOIN tasks_messages USING(task_id) WHERE tasks_messages.status IN ('process', 'сhecking', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments') AND (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND accounts.deleted <> True AND accounts.account_status <> 'inactive') AND user_notifications.telegram_id NOT IN (SELECT telegram_id FROM actions FULL OUTER JOIN tasks_messages USING(task_id) WHERE task_id = $1 AND (telegram_id, link_action, type_task) IN (SELECT telegram_id, link_action, type_task FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN actions USING(task_id) WHERE tasks_messages.status NOT IN ('completed', 'refuse', 'refuse_late', 'scored', 'fully_completed', 'deleted')) GROUP BY telegram_id) AND EXISTS (SELECT 1 FROM tasks_messages WHERE tasks_messages.telegram_id = user_notifications.telegram_id LIMIT 1) GROUP BY accounts.telegram_id, user_notifications.telegram_id, level, priority, accounts.account_name, subscriptions, likes, retweets, comments HAVING COUNT(CASE WHEN tasks_messages.status IN ('offer') THEN 1 END) <= $2) as tg_common GROUP BY telegram_id, level, priority, tasks_sent_today, subscriptions, likes, retweets, comments HAVING COUNT(account_name) > 0;''', task_id, max_tasks_in_interval)
+            all_workers_info: list[WorkersInfo] = await connection.fetch('''SELECT telegram_id, level, priority, COUNT(account_name) as available_accounts, tasks_sent_today, subscriptions, likes, retweets, comments FROM (SELECT user_notifications.telegram_id, level, priority, accounts.account_name, COUNT(CASE WHEN statistics.offer_time >= date_trunc('day', current_timestamp AT TIME ZONE 'Europe/Moscow') THEN 1 END) as tasks_sent_today, subscriptions, likes, retweets, comments FROM user_notifications JOIN tasks_distribution USING(telegram_id) LEFT JOIN tasks_messages USING(telegram_id) LEFT JOIN statistics USING(tasks_msg_id) RIGHT JOIN accounts ON user_notifications.telegram_id = accounts.telegram_id WHERE user_notifications.telegram_id IN (SELECT telegram_id FROM users JOIN user_notifications USING(telegram_id) JOIN tasks_distribution USING(telegram_id) WHERE telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) AND user_notifications.all_notifications = True) AND accounts.account_name IN (SELECT account_name FROM accounts WHERE account_name NOT IN (SELECT completed_tasks.account_name FROM actions JOIN tasks USING(task_id) JOIN completed_tasks USING(task_id) WHERE (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND account_name NOT IN (SELECT account_name FROM actions JOIN tasks_messages USING(task_id) WHERE tasks_messages.status IN ('process', 'сhecking', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments') AND (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND accounts.deleted <> True AND accounts.account_status <> 'inactive') AND user_notifications.telegram_id NOT IN (SELECT telegram_id FROM actions FULL OUTER JOIN tasks_messages USING(task_id) WHERE task_id = $1 AND (telegram_id, link_action, type_task) IN (SELECT telegram_id, link_action, type_task FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN actions USING(task_id) WHERE tasks_messages.status NOT IN ('completed', 'refuse', 'refuse_late', 'scored', 'fully_completed', 'hidden', 'deleted')) GROUP BY telegram_id) AND EXISTS (SELECT 1 FROM tasks_messages WHERE tasks_messages.telegram_id = user_notifications.telegram_id LIMIT 1) GROUP BY accounts.telegram_id, user_notifications.telegram_id, level, priority, accounts.account_name, subscriptions, likes, retweets, comments HAVING COUNT(CASE WHEN tasks_messages.status IN ('offer') THEN 1 END) <= $2) as tg_common GROUP BY telegram_id, level, priority, tasks_sent_today, subscriptions, likes, retweets, comments HAVING COUNT(account_name) > 0;''', task_id, max_tasks_in_interval)
             return await self._get_ready_workers_dict(task_id, all_workers_info)
 
     # Получить всех воркеров, для какого-то раунда
     async def get_all_workers_for_round(self, task_id):
         async with self.pool.acquire() as connection:
-            # all_workers_info: list[WorkersInfo] = await connection.fetch('''SELECT telegram_id, level, priority, COUNT(account_name) as available_accounts, tasks_sent_today, subscriptions, likes, retweets, comments FROM (SELECT user_notifications.telegram_id, level, priority, accounts.account_name, COUNT(CASE WHEN statistics.offer_time >= date_trunc('day', current_timestamp AT TIME ZONE 'Europe/Moscow') THEN 1 END) as tasks_sent_today, subscriptions, likes, retweets, comments FROM user_notifications JOIN tasks_distribution USING(telegram_id) LEFT JOIN tasks_messages USING(telegram_id) LEFT JOIN statistics USING(tasks_msg_id) RIGHT JOIN accounts ON user_notifications.telegram_id = accounts.telegram_id WHERE user_notifications.telegram_id IN (SELECT telegram_id FROM users JOIN user_notifications USING(telegram_id) JOIN tasks_distribution USING(telegram_id) WHERE telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) AND user_notifications.all_notifications = True AND tasks_distribution.booking = False) AND accounts.account_name IN (SELECT account_name FROM accounts WHERE account_name NOT IN (SELECT completed_tasks.account_name FROM actions JOIN tasks USING(task_id) JOIN completed_tasks USING(task_id) WHERE (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND account_name NOT IN (SELECT account_name FROM actions JOIN tasks_messages USING(task_id) WHERE tasks_messages.status IN ('process', 'сhecking', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments') AND (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND accounts.deleted <> True AND accounts.account_status <> 'inactive') AND user_notifications.telegram_id NOT IN (SELECT telegram_id FROM actions FULL OUTER JOIN tasks_messages USING(task_id) WHERE task_id = $1 AND (telegram_id, link_action, type_task) IN (SELECT telegram_id, link_action, type_task FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN actions USING(task_id) WHERE tasks_messages.status NOT IN ('completed', 'refuse', 'refuse_late', 'scored', 'fully_completed', 'deleted')) GROUP BY telegram_id) AND EXISTS (SELECT 1 FROM tasks_messages WHERE tasks_messages.telegram_id = user_notifications.telegram_id LIMIT 1) GROUP BY accounts.telegram_id, user_notifications.telegram_id, level, priority, accounts.account_name, subscriptions, likes, retweets, comments HAVING COUNT(CASE WHEN tasks_messages.status IN ('offer') THEN 1 END) <= $2) as tg_common GROUP BY telegram_id, level, priority, tasks_sent_today, subscriptions, likes, retweets, comments HAVING COUNT(account_name) > 0;''', task_id, max_tasks_in_interval)
-
             # В отличии от запроса выше, тут
             # Убрано условие, чтобы не лежало много тасков
             # Добавлено поле с инфо о круге юзера
             # Если юзер уже как-то контактировал с данным таском, он не отбирается
-            all_workers_info: list[WorkersInfo] = await connection.fetch('''SELECT telegram_id, circular_round, level, priority, COUNT(account_name) as available_accounts, tasks_sent_today, subscriptions, likes, retweets, comments FROM (SELECT user_notifications.telegram_id, circular_round, level, priority, accounts.account_name, COUNT(CASE WHEN statistics.offer_time >= date_trunc('day', current_timestamp AT TIME ZONE 'Europe/Moscow') THEN 1 END) as tasks_sent_today, subscriptions, likes, retweets, comments FROM user_notifications JOIN tasks_distribution USING(telegram_id) LEFT JOIN tasks_messages USING(telegram_id) LEFT JOIN statistics USING(tasks_msg_id) RIGHT JOIN accounts ON user_notifications.telegram_id = accounts.telegram_id WHERE user_notifications.telegram_id IN (SELECT telegram_id FROM users JOIN user_notifications USING(telegram_id) JOIN tasks_distribution USING(telegram_id) WHERE telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) AND user_notifications.all_notifications = True AND tasks_distribution.booking = False) AND accounts.account_name IN (SELECT account_name FROM accounts WHERE account_name NOT IN (SELECT completed_tasks.account_name FROM actions JOIN tasks USING(task_id) JOIN completed_tasks USING(task_id) WHERE (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND account_name NOT IN (SELECT account_name FROM actions JOIN tasks_messages USING(task_id) WHERE tasks_messages.status IN ('process', 'сhecking', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments') AND (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND accounts.deleted <> True AND accounts.account_status <> 'inactive') AND user_notifications.telegram_id NOT IN (SELECT telegram_id FROM actions FULL OUTER JOIN tasks_messages USING(task_id) WHERE task_id = $1 AND (telegram_id, link_action, type_task) IN (SELECT telegram_id, link_action, type_task FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN actions USING(task_id)) GROUP BY telegram_id) AND EXISTS (SELECT 1 FROM tasks_messages WHERE tasks_messages.telegram_id = user_notifications.telegram_id LIMIT 1) GROUP BY accounts.telegram_id, circular_round, user_notifications.telegram_id, level, priority, accounts.account_name, subscriptions, likes, retweets, comments) as tg_common GROUP BY telegram_id, circular_round, level, priority, tasks_sent_today, subscriptions, likes, retweets, comments HAVING COUNT(account_name) > 0;''', task_id)
+            all_workers_info: list[WorkersRoundInfo] = await connection.fetch('''SELECT telegram_id, circular_round, level, priority, COUNT(account_name) as available_accounts, tasks_sent_today, subscriptions, likes, retweets, comments FROM (SELECT user_notifications.telegram_id, circular_round, level, priority, accounts.account_name, COUNT(CASE WHEN statistics.offer_time >= date_trunc('day', current_timestamp AT TIME ZONE 'Europe/Moscow') THEN 1 END) as tasks_sent_today, subscriptions, likes, retweets, comments FROM user_notifications JOIN tasks_distribution USING(telegram_id) LEFT JOIN tasks_messages USING(telegram_id) LEFT JOIN statistics USING(tasks_msg_id) RIGHT JOIN accounts ON user_notifications.telegram_id = accounts.telegram_id WHERE user_notifications.telegram_id IN (SELECT telegram_id FROM users JOIN user_notifications USING(telegram_id) JOIN tasks_distribution USING(telegram_id) WHERE telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND telegram_id NOT IN (SELECT telegram_id FROM they_banned WHERE ban_status = True) AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) AND user_notifications.all_notifications = True) AND accounts.account_name IN (SELECT account_name FROM accounts WHERE account_name NOT IN (SELECT completed_tasks.account_name FROM actions JOIN tasks USING(task_id) JOIN completed_tasks USING(task_id) WHERE (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND account_name NOT IN (SELECT account_name FROM actions JOIN tasks_messages USING(task_id) WHERE tasks_messages.status IN ('process', 'сhecking', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments') AND (actions.link_action, actions.type_task) IN (SELECT actions.link_action, actions.type_task FROM tasks JOIN actions USING(task_id) WHERE task_id = $1)) AND accounts.deleted <> True AND accounts.account_status <> 'inactive') AND user_notifications.telegram_id NOT IN (SELECT telegram_id FROM actions FULL OUTER JOIN tasks_messages USING(task_id) WHERE task_id = $1 AND (telegram_id, link_action, type_task) IN (SELECT telegram_id, link_action, type_task FROM tasks_messages JOIN statistics USING(tasks_msg_id) RIGHT JOIN actions USING(task_id)) GROUP BY telegram_id) AND EXISTS (SELECT 1 FROM tasks_messages WHERE tasks_messages.telegram_id = user_notifications.telegram_id LIMIT 1) GROUP BY accounts.telegram_id, circular_round, user_notifications.telegram_id, level, priority, accounts.account_name, subscriptions, likes, retweets, comments) as tg_common GROUP BY telegram_id, circular_round, level, priority, tasks_sent_today, subscriptions, likes, retweets, comments HAVING COUNT(account_name) > 0;''', task_id)
             return self._get_ready_workers_dict(task_id, all_workers_info, circular_round=True)
 
     # Отбор воркеров, у которых нет лимитов на задания
     async def _get_ready_workers_dict(self, task_id, all_workers_info: list[WorkersInfo], circular_round=False):
-        actions_tuple = await self.get_actions_tuple(task_id)
+        actions_list = await self.get_actions_tuple(task_id)
         limits_dict = await self.get_limits_dict()
         limits_executions_dict = await self.get_limits_executions_dict()
-        ready_workers_dict: dict[int, dict[str, int]] = {} if not circular_round else {'1': {}, '2': {}, '3': {}}
+        ready_workers_dict: dict[int, dict[str, int]] = {} if not circular_round else {1: {}, 2: {}, 3: {}}
         for info in all_workers_info:
             # Проверка на то, что не превышен лимит на сегодня
             if limits_dict[info['level']] > info['tasks_sent_today']:
                 # Проверка на то, что у пользователя включено получение данного вида заданий (лайков, ретвитов)
-                for action in actions_tuple:
+                for action in actions_list:
                     if action in info and not info[action]:
                         break
                 else:
@@ -1389,13 +1799,12 @@ class Database:
                         ready_workers_dict[info['circular_round']][info['telegram_id']] = {'priority': info['priority'], 'available_accounts':  min(info['available_accounts'], limits_executions_dict[info['level']])}
                     return ready_workers_dict
 
-    async def get_actions_tuple(self, task_id):
+    async def get_actions_list(self, task_id):
         async with self.pool.acquire() as connection:
             actions = await connection.fetch('SELECT type_task FROM actions WHERE task_id = $1', task_id)
-            return tuple(action['type_task'] for action in actions)
+            return [action['type_task'] for action in actions]
 
-
-    # Отбоор новичков
+    # Отбор новичков
     async def get_some_beginners(self, task_id):
         async with self.pool.acquire() as connection:
             # Достаём новичков, применяя минимальную проверку (на бан, на то что им сейчас не отправляется другой таск)
@@ -1413,18 +1822,8 @@ class Database:
             executions = await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = $1', task_id)
             return executions['executions']
 
-    # Бронирование воркеров
-    async def worker_booking(self, workers: list[int]):
-        async with self.pool.acquire() as connection:
-            await connection.execute('UPDATE tasks_distribution SET booking = True WHERE telegram_id = ANY($1)', workers)
-
-    # Разбронировывание воркеров
-    async def worker_unbooking(self, workers: list[int]):
-        async with self.pool.acquire() as connection:
-            await connection.execute('UPDATE tasks_distribution SET booking = False WHERE telegram_id = ANY($1)', workers)
-
     # Достаёт информацию о об отправленных заданиях
-    async def get_sent_tasks(self, task_id):
+    async def get_sent_tasks(self):
         async with self.pool.acquire() as connection:
             # Я так и не смог взять все записи в нужном мне временном промежутке, как бы не пытался(
             # result = await connection.fetch("SELECT task_id, offer_time, start_time FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE offer_time >= now() - interval '4 days' AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) ORDER BY offer_time DESC;", task_id)
@@ -1441,7 +1840,7 @@ class Database:
                     days_difference = (now_time.date() - offer_time.date()).days
                     statistics_dict.setdefault(f'{days_difference}_day_ago', {})
                     statistics_dict[f'{days_difference}_day_ago'].setdefault(info['task_id'], {'quantity_submitted_tasks': 0, 'quantity_accepted_tasks': 0})
-                    statistics_dict[f'{days_difference}_day_ago'][info['task_id']]['quantity_submitted_tasks'] += 1 if time_difference <= 50 else 0  # Если поздно сообщение о таске пришло, то его не засчитываем
+                    statistics_dict[f'{days_difference}_day_ago'][info['task_id']]['quantity_submitted_tasks'] += 1 if time_difference <= 50 else 0  # Если в последние минуты сообщение о таске пришло, то его не засчитываем
                     if info['start_time']:
                         start_time = info['start_time'].astimezone(pytz.timezone('Europe/Moscow'))
                         start_time_only = start_time.hour * 60 + start_time.minute
@@ -1575,8 +1974,7 @@ class Database:
     async def get_executions_and_in_process_number(self, task_id):
         async with self.pool.acquire() as connection:
             info = await connection.fetchrow("SELECT executions, (SELECT COUNT(completed_tasks.unique_id) FROM completed_tasks WHERE task_id = $1) as completed_tasks, COUNT(CASE WHEN tasks_messages.status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'checking') THEN 1 END) as in_process FROM tasks_messages RIGHT JOIN tasks USING(task_id) WHERE task_id = $1 GROUP BY 1", task_id)
-            return {'executions': info['executions'], 'completed_tasks': info['completed_tasks'], 'in_process': info['in_process']}
-
+            return TaskInfo(executions=info['executions'], completed_tasks=info['completed_tasks'], in_process=info['in_process'])
 
     # Достать всех забанненых юзеров
     async def get_is_banned_users(self):
@@ -1608,7 +2006,7 @@ class Database:
         async with self.pool.acquire() as connection:
             info = await connection.fetchrow('SELECT counter FROM they_banned WHERE telegram_id = $1', tg_id)
             if not info:
-                await connection.execute('INSERT INTO they_banned(telegram_id) VALUES ($1)', tg_id)
+                await connection.execute('INSERT INTO they_banned(telegram_id) VALUES ($1) ON CONFLICT (telegram_id) DO NOTHING', tg_id)
             elif info['counter'] == 1:
                 await connection.execute('UPDATE they_banned SET ban_status = True, counter = 2 WHERE telegram_id = $1', tg_id)
                 return True
@@ -1685,7 +2083,7 @@ class Database:
                 else:
                     counters_dict['offer'] = -10
                 # Если таск был скрыт
-                if task['offer_time_more'] and not task['start_time'] and task['status'] == 'deleted':
+                if task['offer_time_more'] and task['status'] == 'hidden':
                     counters_dict['hiding'] += 1
                 else:
                     counters_dict['hiding'] = -10
@@ -1709,7 +2107,6 @@ class Database:
                             await self.add_new_priority_fines(tg_id)
                         # Понижение в рейтинге + отключение кнопки
                         finally_priority = await self.min_priority(tg_id, change_priority[action])
-                        print('Отдаю ключ ', finally_priority)
                         await connection.execute('UPDATE tasks_distribution SET priority = $2 WHERE telegram_id = $1', tg_id, finally_priority)
                         await self.change_in_circle(tg_id)
                         return action
@@ -1722,6 +2119,7 @@ class Database:
                 fines_id = await connection.fetchval("INSERT INTO fines(telegram_id, fines_type) VALUES ($1, 'temporary') RETURNING fines_id", tg_id)
                 await connection.execute("INSERT INTO temporary(fines_id, valid_until, reduction_in_priority) VALUES ($1, NOW() + INTERVAL '3 days', $2)", fines_id, constant_decline)
 
+    # Добавление нового штрафа, который нужно отработать
     async def add_new_reward_fines(self, tg_id, task_id, awards_cut=30):
         async with self.pool.acquire() as connection:
             async with connection.transaction():
@@ -1759,14 +2157,14 @@ class Database:
             need_accounts = await connection.fetchrow('SELECT prelim, main, challenger, champion FROM number_of_accounts')
             return {level: value for level, value in need_accounts.items()}
 
-    # Информация о нужно уровне, действующих аккаунтах и выполненных заданиях для повышения уровня
+    # Информация о нужном уровне, действующих аккаунтах и выполненных заданиях для повышения уровня
     async def get_info_for_change_level(self, tg_id):
         async with self.pool.acquire() as connection:
             levels = await connection.fetchrow('SELECT prelim, main, challenger, champion FROM number_of_completed_tasks')
             levels = [level for level in levels.keys()]
+            level = await connection.fetchrow('SELECT level FROM tasks_distribution WHERE telegram_id = $1', tg_id)
             need_level = levels[*[i+1 for i in range(len(levels)) if levels[i] == level['level'] and level != 'champion']]
             if need_level:
-                level = await connection.fetchrow('SELECT level FROM tasks_distribution WHERE telegram_id = $1', tg_id)
                 accounts = await connection.fetchrow("SELECT COUNT(account_name) FROM accounts WHERE telegram_id = $1 AND deleted = False AND account_status = 'active'", tg_id)
                 completed_tasks = await connection.fetchrow('SELECT COUNT(*) FROM completed_tasks LEFT JOIN tasks_distribution USING(telegram_id) WHERE date_of_last_check < date_of_completion AND telegram_id = $1', tg_id)
                 return {'need_level': need_level, 'accounts': accounts['count'], 'completed_tasks': completed_tasks['count']}
@@ -1803,13 +2201,13 @@ class Database:
             for worker in workers_dict:
                 level_worker = workers_dict[worker]['level']
                 completed_tasks = workers_dict[worker]['completed_tasks']
-                key = [key for key, level in levels_dict.items() if level == level_worker]
+                key = [key for key, level in levels_dict.items() if level == level_worker][0]
                 # Понижение на 1 уровень
-                if completed_tasks >= need_dict[levels_dict[key[0] - 1]] or need_dict[levels_dict[key[0] - 1]] == 'vacationers':
-                    new_level = need_dict[levels_dict[key[0] - 1]]
+                if completed_tasks >= need_dict[levels_dict[key - 1]] or need_dict[levels_dict[key - 1]] == 'vacationers':
+                    new_level = levels_dict[key - 1]
                 # Понижение на 2 уровня
                 else:
-                    new_level = need_dict[levels_dict[key[0] - 2]]
+                    new_level = levels_dict[key - 2]
                 await connection.execute('UPDATE tasks_distribution SET level = $2 WHERE telegram_id = $1', worker, new_level)
 
     # Обновление времени чекоров уровня и чекера тасков
@@ -1820,8 +2218,7 @@ class Database:
     # Достать все таски, которые уже полежали более 10 минут
     async def get_active_tasks(self):
         async with self.pool.acquire() as connection:
-            # tasks = await connection.fetch("SELECT tb_1.task_id, tb_1.executions, NOW() - tb_1.date_of_creation as passed_after_creation, NOW() - tb_1.date_of_check as passed_after_check, tb_1.in_process, COUNT(completed_tasks.unique_id) as completed_tasks FROM completed_tasks RIGHT JOIN (SELECT tasks.task_id, executions, date_of_creation, date_of_check, COUNT(CASE WHEN tasks_messages.status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'checking') THEN 1 END) as in_process FROM tasks_messages RIGHT JOIN tasks USING(task_id) WHERE tasks.status='active' AND NOW() - tasks.date_of_check >= INTERVAL '20 minutes' GROUP BY tasks.task_id, date_of_creation, date_of_check) as tb_1 USING(task_id) GROUP BY 1, 2, 3, 4, 5")
-            tasks = await connection.fetch("SELECT tb_1.task_id, tb_1.executions, NOW() - tb_1.date_of_creation as passed_after_creation, NOW() - tb_1.date_of_check as passed_after_check, tb_1.in_process, COUNT(completed_tasks.unique_id) as completed_tasks FROM completed_tasks RIGHT JOIN (SELECT tasks.task_id, executions, date_of_creation, date_of_check, COUNT(CASE WHEN tasks_messages.status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'checking') THEN 1 END) as in_process FROM tasks_messages RIGHT JOIN tasks USING(task_id) WHERE tasks.status='active' AND round IS NULL GROUP BY tasks.task_id, date_of_creation, date_of_check) as tb_1 USING(task_id) GROUP BY 1, 2, 3, 4, 5")
+            tasks = await connection.fetch("SELECT tb_1.task_id, tb_1.executions, NOW() - tb_1.date_of_creation as passed_after_creation, NOW() - tb_1.date_of_check as passed_after_check, tb_1.in_process, COUNT(completed_tasks.unique_id) as completed_tasks FROM completed_tasks RIGHT JOIN (SELECT tasks.task_id, executions, date_of_creation, date_of_check, COUNT(CASE WHEN tasks_messages.status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'checking') THEN 1 END) as in_process FROM tasks_messages RIGHT JOIN tasks USING(task_id) WHERE tasks.status='active' AND NOW() - tasks.date_of_check >= INTERVAL '20 minutes' GROUP BY tasks.task_id, date_of_creation, date_of_check) as tb_1 USING(task_id) GROUP BY 1, 2, 3, 4, 5")
             return {task['task_id']: {'executions': task['executions'], 'passed_after_creation': task['passed_after_creation'], 'passed_after_check': task['passed_after_check'], 'completed_tasks': task['completed_tasks'], 'in_process': task['in_process']} for task in tasks}
 
 
@@ -1831,18 +2228,296 @@ class Database:
             await connection.execute('UPDATE tasks SET date_of_check = NOW() WHERE task_id = ANY($1)', tasks)
 
     # Получить настоящий раунд какого-то таска
-    async def get_round_from_task(self, task_id):
+    async def get_next_round_from_task(self, task_id):
         async with self.pool.acquire() as connection:
             task_round = await connection.fetchrow('SELECT round FROM tasks WHERE task_id = $1', task_id)
-            return task_round['round']
+            return task_round['round'] + 1
 
     # Узнать, есть ли активные задания
     async def check_active_tasks(self):
         async with self.pool.acquire() as connection:
-            check_status_tasks = await connection.fetchrow("SELECT task_id FROM tasks WHERE status = 'active'")
+            check_status_tasks = await connection.fetchrow("SELECT task_id FROM tasks WHERE status NOT IN ('completed', 'deleted')")
             if check_status_tasks:
                 return True
             return False
+
+    # Узнать, не завершено ли задание
+    async def check_unfinished_task(self, task_id):
+        async with self.pool.acquire() as connection:
+            return bool(await connection.fetchval("SELECT task_id FROM tasks WHERE task_id = $1 AND status IN ('completed', 'deleted')", task_id))
+
+    # Получить информацию об активном задании
+    async def info_for_increased_executions(self, task_id) -> InfoIncreasedExecutions:
+        async with self.pool.acquire() as connection:
+            info = await connection.fetchrow('SELECT executions, (SELECT COUNT(*) FROM completed_tasks WHERE task_id = $1) as number_completed, price, balance FROM tasks JOIN users USING(telegram_id) WHERE task_id = $1', task_id)
+            return InfoIncreasedExecutions(
+                executions=info['executions'],
+                number_completed=info['number_completed'],
+                price=self._round_number(info['price']),
+                balance=self._round_number(info['balance']))
+
+    # Обновить выполнения задания
+    async def update_task_executions(self, task_id, executions, diff):
+        async with self.pool.acquire() as connection:
+            tg_id = await self.get_telegram_id_from_tasks(task_id)
+            await connection.execute('UPDATE tasks SET executions = executions + $2, date_of_last_update = NOW() WHERE task_id = $1', task_id, executions)
+            await connection.execute('UPDATE users SET balance = balance - $2 WHERE telegram_id = $1', tg_id, diff)
+
+    # Взять информацию об оставшемся балансе задания
+    async def get_remaining_task_balance(self, task_id):
+        async with self.pool.acquire() as connection:
+            info = await connection.fetchrow("SELECT status, price, COALESCE(tb_1.doing_now, 0) as doing_now, COALESCE(tg_2.number_sent_users, 0) as number_sent_users, balance_task, COALESCE((SELECT COUNT(*) FROM completed_tasks WHERE task_id = $1), 0) as completed_number FROM tasks LEFT JOIN (SELECT task_id, COUNT(*) as doing_now FROM tasks_messages WHERE task_id = $1 AND status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'сhecking') GROUP BY 1) as tb_1 USING(task_id) LEFT JOIN (SELECT task_id, COUNT(*) as number_sent_users FROM tasks_messages WHERE task_id = $1 AND status NOT IN ('completed', 'refuse', 'refuse_late', 'scored', 'fully_completed', 'hidden', 'deleted') GROUP BY 1) as tg_2 USING(task_id) WHERE task_id = $1;", task_id)
+            rewards = info['doing_now'] * info['price']
+            return RemainingTaskBalance(
+                status=info['status'],
+                number_rewards=self._round_number(rewards),
+                number_workers=info['doing_now'],
+                balance_task=self._round_number(info['balance_task']),
+                number_sent_users=info['number_sent_users'],
+                remaining_task_balance=self._round_number((info['balance_task'] - (info['completed_number'] * info['price'] + rewards))))
+
+    # Проверка на то, что задания не слишком часто удалялись таскодателем в последние дни
+    async def check_quantity_delete_task(self, tg_id, task_id, check_number=None):
+        async with self.pool.acquire() as connection:
+            check_executions = await connection.fetchrow("SELECT executions, (SELECT COUNT(*) FROM completed_tasks WHERE task_id = $1) as completed_tasks FROM tasks WHERE task_id = $1", task_id)
+            if not check_executions['completed_tasks'] > (check_executions['executions'] / 100 * 30):
+                deleted_tasks = await connection.fetch("SELECT task_id, executions, COALESCE(tb_1.completed, 0) as completed FROM tasks LEFT JOIN (SELECT task_id, COUNT(*) as completed FROM completed_tasks WHERE task_id IN (SELECT task_id FROM tasks) GROUP BY 1) as tb_1 USING (task_id) JOIN tasks_messages USING(task_id) WHERE tasks.telegram_id = $1 AND tasks.status = 'deleted' GROUP BY 1, 2, 3", tg_id)
+                if deleted_tasks:
+                    selected_tasks = [task for task in deleted_tasks if task['completed'] < task['executions'] / 100 * 30]
+                    if not check_number and len(selected_tasks) == 2:
+                        return True
+                    elif check_number and len(selected_tasks) >= check_number:
+                        return True
+            return False
+
+    # Вернуть пользователю оставшийся баланс с задания
+    async def return_some_balanc_from_task(self, task_id, sum_refund):
+        async with self.pool.acquire() as connection:
+            tg_id = await self.get_telegram_id_from_tasks(task_id)
+            await connection.execute('UPDATE users SET balance = balance + $2 WHERE telegram_id = $1', tg_id, sum_refund)
+
+    # Получить баланс задания
+    async def check_balance_task(self, task_id):
+        async with self.pool.acquire() as connection:
+            return (await connection.fetchrow('SELECT balance_task FROM tasks WHERE task_id = $1', task_id))['balance_task']
+
+    # Получить оставшийся баланс задания
+    async def check_remaining_task_balance(self, task_id):
+        async with self.pool.acquire() as connection:
+            return (await connection.fetchrow("SELECT COALESCE(balance_task - COALESCE(price * tb_1.count_start, 0), 0) as remaining_task_balance FROM tasks LEFT JOIN (SELECT task_id, COUNT(*) as count_start FROM tasks_messages WHERE status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'сhecking', 'completed') AND task_id = $1 GROUP BY 1) as tb_1 USING(task_id) WHERE task_id = $1", task_id))['remaining_task_balance']
+
+
+
+    # Добавить запись о возврате баланса
+    async def record_of_refund(self, task_id, sum_refund):
+        async with self.pool.acquire() as connection:
+            await connection.execute("INSERT INTO refund(task_id, refund_amount) VALUES ($1, $2)", task_id, sum_refund)
+
+    # Найти кол-во и процент, сколько уже отказов от тасков
+    async def failure_rate_check(self, task_id):
+        async with self.pool.acquire() as connection:
+            result = await connection.fetchrow("SELECT task_id, COUNT(tasks_msg_id) as count_workers, COUNT(CASE WHEN tasks_messages.status = 'hidden' THEN 1 END) as hidden_task, COUNT(CASE WHEN tasks_messages.status IN ('refuse', 'refuse_late') THEN 1 END) as refuse_task FROM tasks_messages WHERE task_id = $1 GROUP BY task_id", task_id)
+            sum_refuse = result['refuse_task'] + result['hidden_task']
+            # Если больше 20 отказов от задания и больше 10% от разосланных заданий
+            if sum_refuse > 1 and sum_refuse >= (result['count_workers'] / 100 * 1):
+                return True
+            return False
+
+    # Получить task_id из tasks_msg_id
+    async def get_task_id_from_tasks_messages(self, tasks_msg_id):
+        async with self.pool.acquire() as connection:
+            return (await connection.fetchrow('SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id))['task_id']
+
+    # Получить все несобранные штрафы
+    async def get_number_uncollected_fines(self) -> dict[int, AllFinesInfo]:
+        async with self.pool.acquire() as connection:
+            fines = await connection.fetch("SELECT victim_user, already_bought, fines_id, tb_1.count_fines, tb_date.last_message FROM fines JOIN bought USING(fines_id) LEFT JOIN (SELECT victim_user, COUNT(*) as count_fines FROM bought GROUP BY 1) as tb_1 USING(victim_user) LEFT JOIN (SELECT victim_user, NOW() - date_of_send as last_message FROM bought WHERE date_of_send IS NOT NULL ORDER BY date_of_send DESC LIMIT 1) as tb_date USING(victim_user) WHERE collection_flag = FALSE AND remaining_to_redeem <= already_bought AND send_id IS Null ORDER BY victim_user;")
+            fines_dict = {}
+            for fine in fines:
+                fines_dict.setdefault(fine['victim_user'], AllFinesInfo(
+                    fines_info=FinesInfo(count_fines=fine['count_fines'],
+                                         last_message=fine['last_message']),
+                    fines_list=[]))
+                fines_dict[fine['victim_user']].fines_list.append(FineInfo(
+                    fines_id=fine['fines_id'],
+                    already_bought=fine['already_bought']))
+            return fines_dict
+
+    # Обновить время отправки на штрафах
+    async def change_send_time_fines(self, fines_list: list[int]):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE bought SET date_of_send = NOW() WHERE fines_id = ANY($1)', fines_list)
+
+    # Создать новый send_id для пачки штрафов
+    async def get_send_id(self, fines_list: list[int]):
+        async with self.pool.acquire() as connection:
+            next_id = (await connection.fetchrow("SELECT COALESCE(send_id + 1, 1) as next_id FROM bought ORDER BY 1 DESC LIMIT 1"))['next_id']
+            await connection.execute("UPDATE bought SET send_id = $1 WHERE fines_id = ANY($2)", next_id, fines_list)
+            return next_id
+
+    # Взять все fines_id из пачки
+
+    # Собрать все штрафы
+    async def collection_fines(self, send_id: int) -> float:
+        async with self.pool.acquire() as connection:
+            async with connection.transaction():
+                fines_id = await connection.fetch('SELECT fines_id FROM bought WHERE send_id = $1', send_id)
+                fines_list = [fine['fines_id'] for fine in fines_id]
+                sum_fines = (await connection.fetchrow('SELECT SUM(already_bought) as sum_fines FROM bought WHERE fines_id = ANY($1) AND collection_flag = False', fines_list))['sum_fines']
+                tg_id = (await connection.fetchrow('SELECT victim_user FROM bought WHERE fines_id = $1', fines_list[0]))['victim_user']
+                await connection.execute('UPDATE users SET balance = balance + $2 WHERE telegram_id = $1', tg_id, sum_fines)
+                await connection.execute('UPDATE bought SET collection_flag = True WHERE fines_id = ANY($1)', fines_list)
+                return self._round_number(sum_fines)
+
+    # Достать основную информацию для админа
+    async def get_main_info_for_admin_panel(self) -> AdminPanelMainInfo:
+        async with self.pool.acquire() as connection:
+            info = await connection.fetchrow("SELECT (SELECT CURRENT_DATE) as now_time, (SELECT admin_balance FROM admin_panel) as admin_balance, COALESCE((SELECT COALESCE(SUM(refund_amount), 0) FROM refund WHERE DATE(date_of_refund) = CURRENT_DATE), 0) as refund_today, COALESCE((SELECT COALESCE(SUM(balance_task * (commission / 100)), 0) FROM tasks JOIN payments_tasks USING(task_id) JOIN prices_actions USING(prices_id) WHERE DATE(date_of_creation) = CURRENT_DATE GROUP BY balance_task, commission), 0) as received_today, COALESCE((SELECT COALESCE(balance_task + (balance_task * (commission / 100)), 0) FROM tasks JOIN payments_tasks USING(task_id) JOIN prices_actions USING(prices_id) WHERE DATE(date_of_creation) = CURRENT_DATE GROUP BY balance_task, commission), 0) as spent_on_task, COALESCE((SELECT COALESCE(SUM(final_reward), 0) FROM completed_tasks WHERE DATE(date_of_completion) = CURRENT_DATE), 0) as earned_by_workers, COALESCE((SELECT COALESCE(COUNT(*), 0) FROM date_join WHERE DATE(date_join) = CURRENT_DATE), 0) as new_users, COALESCE((SELECT COALESCE(COUNT(*), 0) FROM accounts WHERE DATE(adding_time) = CURRENT_DATE), 0) as new_accounts, COALESCE((SELECT COALESCE(COUNT(*), 0) FROM tasks WHERE DATE(date_of_creation) = CURRENT_DATE), 0) as new_tasks, COALESCE((SELECT COALESCE(COUNT(*), 0) FROM statistics WHERE DATE(offer_time) = CURRENT_DATE), 0) as sended_tasks, COALESCE((SELECT COALESCE(COUNT(*), 0) FROM completed_tasks WHERE DATE(date_of_completion) = CURRENT_DATE), 0) as completed_tasks, COALESCE((SELECT COALESCE(COUNT(*), 0) FROM fines WHERE DATE(date_added) = CURRENT_DATE), 0) as sended_fines;")
+            return AdminPanelMainInfo(
+                now_time=info['now_time'],
+                admin_balance=info['admin_balance'],
+                received_today=info['received_today'],
+                spent_on_task=info['spent_on_task'],
+                refund_today=info['refund_today'],
+                earned_by_workers=info['earned_by_workers'],
+                new_users=info['new_users'],
+                new_accounts=info['new_accounts'],
+                new_tasks=info['new_tasks'],
+                sended_tasks=info['sended_tasks'],
+                completed_tasks=info['completed_tasks'],
+                sended_fines=info['sended_fines'])
+
+    # Достать список юзеров с информацией
+    async def get_users_list_with_info(self, condition_list: str = 'white_list', condition_sort: str = None, time_condition: int = None) -> list[UsersList]:
+        async with self.pool.acquire() as connection:
+            conditions_dict = {
+                'white_list': 'WHERE users.telegram_id NOT IN (SELECT telegram_id FROM is_banned) AND users.telegram_id NOT IN (SELECT telegram_id FROM they_banned)',
+                'black_list': 'WHERE users.telegram_id IN (SELECT telegram_id FROM is_banned)',
+                'grey_list': 'WHERE users.telegram_id IN (SELECT telegram_id FROM they_banned)'}
+            time_conditions_dict = {
+                'registration_date': f"AND NOW() - date_join < INTERVAL '{time_condition} days'",
+                'number_accounts': f"AND NOW() - tb_accs.adding_time < INTERVAL '{time_condition} days'",
+                'priority': f"NOW() - date_update_level < INTERVAL '{time_condition} days'",
+                'level': f"NOW() - date_update_level < INTERVAL '{time_condition} days'",
+                'number_completed': f"AND NOW() - tb_cmp_tsks.date_of_completion < INTERVAL '{time_condition} days'",
+                'number_add_tasks': f"AND NOW() - date_of_creation < INTERVAL '{time_condition} days'",
+                'number_active_tasks': f"AND NOW() - date_of_creation < INTERVAL '{time_condition} days'",
+                'number_fines': f"AND NOW() - date_added < INTERVAL '{time_condition} days'"}
+            all_users = await connection.fetch(f"SELECT telegram_id, telegram_name, date_join, priority, COALESCE(level, 'beginner') as level, COALESCE(number_accounts, 0) as number_accounts, COALESCE(number_completed, 0) as number_completed, COALESCE(number_add_tasks, 0) as number_add_tasks, COALESCE(number_active_tasks, 0) as number_active_tasks, COALESCE(number_fines, 0) as number_fines FROM users LEFT JOIN date_join USING(telegram_id) LEFT JOIN tasks_distribution USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_accounts FROM accounts GROUP BY 1) as tb_accs USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_completed FROM completed_tasks GROUP BY 1) tb_cmp_tsks USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_add_tasks FROM tasks GROUP BY 1) tb_tasks USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_active_tasks FROM tasks WHERE status NOT IN ('completed', 'deleted') GROUP BY 1 ) tb_active_tasks USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_fines FROM fines GROUP BY 1) tb_fines USING(telegram_id) {conditions_dict[condition_list]} {time_conditions_dict[condition_sort] if condition_sort else ''} ORDER BY date_join")
+            users_list = []
+            for user in all_users:
+                users_list.append(UsersList(
+                    tg_id=user['telegram_id'],
+                    username=user['telegram_name'],
+                    registration_date=user['date_join'].strftime('%d-%m-%Y %H:%M:%S'),
+                    priority=user['priority'],
+                    level=user['level'],
+                    number_accounts=user['number_accounts'],
+                    number_completed=user['number_completed'],
+                    number_add_tasks=user['number_add_tasks'],
+                    number_active_tasks=user['number_active_tasks'],
+                    number_fines=user['number_fines']))
+            return users_list
+
+    async def get_all_info_for_user(self, tg_id) -> UserAllInfo:
+        async with self.pool.acquire() as connection:
+            user = await connection.fetchrow("SELECT telegram_id, telegram_name, date_join, (CASE WHEN telegram_id IN (SELECT telegram_id FROM is_banned) THEN 'в чёрном списке' WHEN telegram_id IN (SELECT telegram_id FROM they_banned)   THEN 'в сером списке'   ELSE 'в белом списке' END) as user_status,   balance,   COALESCE(count_referrals, 0) as count_referrals,   inviting_user,   COALESCE(total_payment, 0) as total_payment,   COALESCE(total_earned, 0) as total_earned,   COALESCE(spent_on_tasks, 0) as spent_on_tasks,   COALESCE(total_refund, 0) as total_refund,   COALESCE(number_tasks, 0) as number_tasks,   COALESCE(number_active_tasks, 0) as number_active_tasks, COALESCE(sum_collected_fines, 0) as sum_collected_fines,   COALESCE(sum_uncollected_fines, 0) as sum_uncollected_fines, priority, COALESCE (level, 'beginner') as level, COALESCE(active_accounts, 0) as active_accounts,   COALESCE(total_sent_tasks, 0) as total_sent_tasks,  COALESCE(total_finished_tasks, 0) as total_finished_tasks,  COALESCE(number_unviewed_tasks, 0) as number_unviewed_tasks,   COALESCE(number_refusals_from_tasks, 0) as number_refusals_from_tasks,   COALESCE(number_hiding_tasks, 0) as number_hiding_tasks,   COALESCE(number_scored_tasks, 0) as number_scored_tasks,  number_tasks_active_now,  COALESCE(number_fines, 0) as number_fines,     COALESCE(number_active_fines, 0) as number_active_fines,   COALESCE(fines_on_priority, 0) as fines_on_priority,   COALESCE(sum_of_fines, 0) as sum_of_fines     FROM users   LEFT JOIN date_join USING(telegram_id)   LEFT JOIN tasks_distribution USING(telegram_id)   LEFT JOIN (SELECT inviter, COUNT(unique_id) as count_referrals FROM referral_office GROUP BY 1) as tb_ref ON tb_ref.inviter = users.telegram_id   LEFT JOIN (SELECT telegram_id, inviter as inviting_user FROM referral_office) as tb_inv USING(telegram_id)   LEFT JOIN (SELECT telegram_id, SUM(amount) total_payment FROM payments GROUP BY 1) as tb_pmnt USING(telegram_id)   LEFT JOIN (SELECT telegram_id, SUM(final_reward) as total_earned FROM completed_tasks GROUP BY 1) as tb_cmlp USING(telegram_id)   LEFT JOIN (SELECT telegram_id, SUM(balance_task) as spent_on_tasks FROM tasks GROUP BY 1) as tb_tsk USING(telegram_id)   LEFT JOIN (SELECT telegram_id, SUM(refund_amount) as total_refund FROM refund JOIN tasks USING(task_id) GROUP BY 1) as tb_rfnd USING(telegram_id)  LEFT JOIN (SELECT telegram_id, COUNT(tasks) as number_tasks FROM tasks GROUP BY 1) as tb_cnt_tsks USING(telegram_id)   LEFT JOIN (SELECT telegram_id, COUNT(tasks) as number_active_tasks FROM tasks WHERE status NOT IN ('completed', 'deleted') GROUP BY 1) as tb_ct_actv_tsks USING(telegram_id)   LEFT JOIN (SELECT victim_user, SUM(already_bought) as sum_collected_fines FROM bought WHERE collection_flag = True GROUP BY 1) as tb_fn ON tb_fn.victim_user = users.telegram_id   LEFT JOIN (SELECT victim_user, SUM(already_bought) as sum_uncollected_fines FROM bought WHERE collection_flag = False GROUP BY 1) as tb_unc_fn ON tb_fn.victim_user = users.telegram_id   LEFT JOIN (SELECT telegram_id, COUNT(account_name) as active_accounts FROM accounts WHERE deleted = False AND account_status = 'active' GROUP BY 1) as tb_accs USING(telegram_id)   LEFT JOIN (SELECT telegram_id, COUNT(tasks_msg_id) as total_sent_tasks FROM tasks_messages GROUP BY 1) as tb_tskm USING(telegram_id)     LEFT JOIN (SELECT telegram_id, COUNT(unique_id) as total_finished_tasks FROM completed_tasks GROUP BY 1) as tb_fnshd USING(telegram_id)    LEFT JOIN (SELECT telegram_id, COUNT(tasks_msg_id) as number_refusals_from_tasks FROM tasks_messages WHERE status IN ('refuse', 'refuse_late') GROUP BY 1) as tb_rfse_tsks USING(telegram_id)   LEFT JOIN (SELECT telegram_id, COUNT(tasks_msg_id) as number_hiding_tasks FROM tasks_messages WHERE status IN ('hidden') GROUP BY 1) as tb_hdn USING(telegram_id)   LEFT JOIN (SELECT telegram_id, COUNT(tasks_msg_id) as number_unviewed_tasks FROM tasks_messages WHERE status IN ('deleted') GROUP BY 1) as tb_tks_usrs USING(telegram_id)    LEFT JOIN (SELECT telegram_id, COUNT(tasks_msg_id) as number_scored_tasks FROM tasks_messages WHERE status = 'scored' GROUP BY 1) as tb_scrd USING(telegram_id) 	  LEFT JOIN (SELECT telegram_id, ARRAY_AGG(tasks_msg_id) as number_tasks_active_now FROM tasks_messages GROUP BY 1) as tb_tskmgs USING(telegram_id)    LEFT JOIN (SELECT telegram_id, COUNT(fines) as number_fines FROM fines GROUP BY 1) as tb_fins USING(telegram_id)   LEFT JOIN (SELECT telegram_id, COUNT(fines) as number_active_fines FROM fines LEFT JOIN temporary USING(fines_id) LEFT JOIN bought USING(fines_id) WHERE NOW() - temporary.valid_until < INTERVAL '3 days' or bought.remaining_to_redeem > bought.already_bought GROUP BY 1) tb_ctv_fns USING(telegram_id)   LEFT JOIN (SELECT telegram_id, SUM(reduction_in_priority) as fines_on_priority FROM fines JOIN temporary USING(fines_id) WHERE NOW() - temporary.valid_until < INTERVAL '3 days' GROUP BY 1) as tb_fns_prt USING(telegram_id)   LEFT JOIN (SELECT telegram_id, SUM(already_bought) as sum_of_fines FROM fines JOIN bought USING(fines_id) WHERE bought.remaining_to_redeem > bought.already_bought GROUP BY 1) as tb_fnl USING(telegram_id) WHERE telegram_id = $1;", tg_id)
+            return UserAllInfo(
+                    telegram_id=user['telegram_id'],
+                    telegram_name=user['telegram_name'],
+                    date_join=user['date_join'].strftime('%d-%m-%Y %H:%M:%S'),
+                    user_status=user['user_status'],
+                    balance=self._round_number(user['balance']),
+                    count_referrals=user['count_referrals'],
+                    inviting_user=user['inviting_user'],
+                    total_payment=self._round_number(user['total_payment']),
+                    total_earned=self._round_number(user['total_earned']),
+                    spent_on_tasks=self._round_number(user['spent_on_tasks']),
+                    total_refund=self._round_number(user['total_refund']),
+                    total_paid=self._round_number(user['spent_on_tasks'] - user['total_refund']),
+                    number_tasks=user['number_tasks'],
+                    number_active_tasks=user['number_active_tasks'],
+                    sum_collected_fines=self._round_number(user['sum_collected_fines']),
+                    sum_uncollected_fines=self._round_number(user['sum_uncollected_fines']),
+                    priority=user['priority'],
+                    level=user['level'],
+                    active_accounts=user['active_accounts'],
+                    total_sent_tasks=user['total_sent_tasks'],
+                    total_finished_tasks=user['total_finished_tasks'],
+                    total_unfinished_tasks=user['number_unviewed_tasks'] + user['number_refusals_from_tasks'] + user['number_hiding_tasks'] + user['number_scored_tasks'],
+                    number_unviewed_tasks=user['number_unviewed_tasks'],
+                    number_scored_tasks=user['number_scored_tasks'],
+                    number_tasks_active_now=user['number_tasks_active_now'],
+                    number_refusals_from_tasks=user['number_refusals_from_tasks'],
+                    number_hiding_tasks=user['number_hiding_tasks'],
+                    number_fines=user['number_fines'],
+                    number_active_fines=user['number_active_fines'],
+                    fines_on_priority=user['fines_on_priority'],
+                    sum_of_fines=self._round_number(user['sum_of_fines']))
+
+    # Найти телеграм_id по юзернейму
+    async def find_tg_id_on_username(self, username):
+        async with self.pool.acquire() as connection:
+            return (await connection.fetchrow("SELECT telegram_id FROM users WHERE telegram_name = $1", username))['telegram_id']
+
+    # Смена приоритета пользователя
+    async def change_user_priority(self, tg_id, priority: int):
+        async with self.pool.acquire() as connection:
+            await connection.execute("UPDATE tasks_distribution SET priority = $2 WHERE telegram_id = $1", tg_id, priority)
+
+    # Смена баланса пользователя
+    async def change_user_balance(self, tg_id, balance: int):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE users SET balance = $2 WHERE telegram_id = $1', tg_id, balance)
+
+    # Выдача нового уровня пользователю
+    async def change_user_level(self, tg_id, level: str):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE tasks_distribution SET level = $2 WHERE telegram_id = $1', tg_id, level)
+
+    # Выдать штраф от админа на макс приоритет
+    async def adding_priority_fines(self, tg_id, fines_priority: int):
+        async with self.pool.acquire() as connection:
+            fines_id = await connection.fetchval("INSERT INTO fines(telegram_id, fines_type) VALUES ($1, 'temporary') RETURNING fines_id", tg_id)
+            await connection.execute("INSERT INTO temporary(fines_id, reduction_in_priority, valid_until ) VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '3 days')", fines_id, fines_priority)
+
+    # Выдать штраф от админа на STB
+    async def adding_stb_fines(self, tg_id, fines_stb: int, victim_user: int = None):
+        async with self.pool.acquire() as connection:
+            fines_id = await connection.fetchval("INSERT INTO fines(telegram_id, fines_type) VALUES ($1, 'bought') RETURNING fines_id", tg_id)
+            if victim_user:
+                await connection.execute("INSERT INTO bought(fines_id, remaining_to_redeem, awards_cut, victim_user) VALUES($1, $2, 100, $3)", fines_id, fines_stb, victim_user)
+            else:
+                await connection.execute("INSERT INTO bought(fines_id, remaining_to_redeem, awards_cut) VALUES($1, $2, 100)", fines_id, fines_stb)
+
+    # Получить информацию о тасках, отправленных пользователю
+    async def get_info_about_sent_tasks(self, tg_id) -> tuple[SentTasksInfo]:
+        async with self.pool.acquire() as connection:
+            tasks = await connection.fetch('SELECT task_id, status, offer_time, COALESCE(finish_time, deleted_time) as complete_time FROM tasks_messages INNER JOIN statistics USING(tasks_msg_id) WHERE telegram_id = $1 ORDER BY offer_time DESC', tg_id)
+            return (SentTasksInfo(task_id=task['task_id'],
+                                  status=task['status'],
+                                  offer_time=task['offer_time'].strftime('%d-%m-%Y %H:%M:%S'),
+                                  complete_time=task['complete_time'].strftime('%d-%m-%Y %H:%M:%S')) for task in tasks)
+
+    # Найти все таски, которым пора переходить на новый раунд
+    async def get_tasks_for_new_round(self):
+        async with self.pool.acquire() as connection:
+            # tasks = await connection.fetch("SELECT task_id, round, executions, NOW() - date_of_creation FROM tasks WHERE round is not Null AND round <> 1 AND status = 'active'")
+            tasks = await connection.fetch("SELECT task_id, round, executions, NOW() - date_of_creation as time_passed, COUNT(CASE WHEN tasks_messages.status = 'completed' THEN 1 ELSE Null END) as count_completed FROM tasks RIGHT JOIN tasks_messages USING(task_id) WHERE round is not Null AND round <> 1 AND tasks.status NOT IN ('completed', 'deleted') GROUP BY task_id, round, executions, time_passed;")
+            info_dict = {2: {'time_passed': 20, 'max_completion_percentage': 75}, 3: {'time_passed': 40, 'max_completion_percentage': 75}}
+            tasks_dict = {}
+            for task in tasks:
+                if info_dict[task['round']]['time_passed'] >= task['time_passed'].total_seconds() * 60 and \
+                        info_dict[task['round']]['max_completion_percentage'] > task['count_completed'] / (task['executions'] / 100):
+                    tasks_dict[task] = None
+            return tasks_dict
+
+            # Дополнить функцию, чтобы, она всё же брала столько, сколько уже делается и это учитывала
+
+            # 2 раунд:
+            # 1. Если после начала таска прошло нужное время и он не достиг овер много выполнений
+            # 3 раунд:
+            # 1. Если после начала таска прошло нужное время и он также не достиг овер много выполнений
 
 
 db = Database()

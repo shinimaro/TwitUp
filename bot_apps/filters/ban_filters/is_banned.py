@@ -14,7 +14,7 @@ class IsBanned(BaseFilter):
     # Добавление нового забанненого пользователя в бд и в список класса
     async def adding_blocked_users(self, user_id, reason: str = None, comment: str = None) -> None:
         IsBanned.is_banned_users.append(user_id)
-        await db.ban_user(user_id, reason, comment)
+        await db.add_ban_user(user_id, reason, comment)
 
     # Убрать юзера из бана
     async def del_blocked_users(self, user_id):

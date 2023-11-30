@@ -7,6 +7,7 @@ from aiogram.types import Message, CallbackQuery
 
 from bot_apps.FSM.FSM_states import FSMAccounts
 from bot_apps.filters.ban_filters.is_banned import IsBanned
+from bot_apps.personal_office.personal_office_handlers import all_our_users
 from databases.database import db
 from bot_apps.personal_office.first_steps.first_steps_keyboards import first_account_builder, add_first_account_builder, \
     before_check_first_account_builder, completion_add_first_account_builder, \
@@ -17,6 +18,7 @@ from bot_apps.personal_office.personal_office_filters import correct_account
 from bot_apps.personal_office.personal_office_parsing import add_new_account
 from bot_apps.wordbank.wordlist import accounts, rules
 from config import load_config
+from parsing.other_parsing.parsing_shadowban import parsing_shadowban
 
 router = Router()
 config = load_config()
@@ -43,7 +45,7 @@ async def add_first_account(callback: CallbackQuery):
 
 
 # Пользователь учится добавлять аккаунт
-@router.callback_query(F.data.in_('specify_account' 'change_first_account'))
+@router.callback_query((F.data == 'specify_account') | (F.data == 'change_first_account'))
 async def adding_an_account(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
     message_id = await callback.message.answer_photo(photo='https://disk.yandex.ru/i/97G2fkTFxPYZKw', caption=accounts['education_2'],
@@ -75,44 +77,19 @@ async def input_first_account(message: Message, state: FSMContext):
     await message.delete()
 
 
-# Пользователь не подписался на аккаунт
-@router.callback_query(F.data.startswith('try_again_education_'))
-async def process_fail_check(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    # check_2 = await func()
-    check_2 = True
-    await callback.message.edit_text(accounts['examination'].format(data.get('account')))
-    await sleep(2)
-    # Если аккаунт так и не найден в подписках
-    if not check_2:
-        await callback.message.edit_text(accounts['fail_check_again'].format(
-            data.get('account')[1:] if callback.data[-1] != '3'
-            else accounts['final_fail'].format(data.get('account')[1:])),
-            reply_markup=await not_add_first_account_builder(int(callback.data[-1]) + 1),
-            disable_web_page_preview=True)
-    # Если аккаунты был найден в подписках
-    else:
-        await callback.message.edit_text(accounts['result_check'].format(data.get('account')[1:]),
-                                         reply_markup=await completion_add_first_account_builder(),
-                                         disable_web_page_preview=True)
-        await add_new_account(callback.from_user.id, data.get('account'))
-        await state.set_state(FSMAccounts.accounts_menu)
-
-
-# Пользователь подписался на канал
+# Провекрка аккаунта пользователя
 @router.callback_query(F.data == 'check_first_task')
 async def process_check_first_task(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     # first_check = func()
     await callback.message.edit_text(accounts['examination'].format(data.get('account')))
-    # Задержка пока для видимости проверки
-    await sleep(3)
-    first_check, shadow_ban = True, True
-    if not first_check:
+    await sleep(1.5)
+    all_users = await all_our_users.get_all_our_users()
+    if not data.get('account') in all_users:
         await callback.message.edit_text(accounts['fail_check'].format(data.get('account')[1:]),
                                          reply_markup=await not_add_first_account_builder(),
                                          disable_web_page_preview=True)
-    elif not shadow_ban:
+    elif await parsing_shadowban(data['account']) is False:
         await callback.message.edit_text(accounts['shadow_ban'].format(data.get('account')[1:]),
                                          reply_markup=await shadow_ban_keyboard_builder(),
                                          disable_web_page_preview=True)
@@ -124,6 +101,26 @@ async def process_check_first_task(callback: CallbackQuery, state: FSMContext):
         await state.set_state(FSMAccounts.accounts_menu)
 
 
+# Пользователь не подписался на аккаунт
+@router.callback_query(F.data.startswith('try_again_education_'))
+async def process_fail_check(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await callback.message.edit_text(accounts['examination'].format(data.get('account')))
+    await sleep(2)
+    all_users = await all_our_users.get_all_our_users()
+    # Если аккаунт так и не найден в подписках
+    if not data.get('account') in all_users:
+        await callback.message.edit_text(accounts['fail_check_again'].format(
+            data.get('account')[1:] if callback.data[-1] != '3'
+            else accounts['final_fail'].format(data.get('account')[1:])),
+            reply_markup=await not_add_first_account_builder(int(callback.data[-1]) + 1),
+            disable_web_page_preview=True)
+    # Если аккаунты был найден в подписках
+    else:
+        await process_check_first_task(callback, state)
+
+
+
 # Переход обратно в меню с информацией о добавлении первого аккаунта
 @router.callback_query(F.data == 'back_check_first_task')
 async def back_check_first_task(callback: CallbackQuery):
@@ -132,7 +129,7 @@ async def back_check_first_task(callback: CallbackQuery):
 
 
 # Первое включение всех уведомлений
-@router.callback_query(F.data.in_('allow_enabling_tasks' 'back_at_end_training_true'))
+@router.callback_query((F.data == 'allow_enabling_tasks') | (F.data == 'back_at_end_training_true'))
 async def enable_all_notifications(callback: CallbackQuery):
     await db.enable_all_on(callback.from_user.id)
     await callback.message.edit_text(accounts['notifications_enabled'].format(0, 0, 0, 0),
@@ -154,7 +151,7 @@ async def open_rules_from_training(callback: CallbackQuery):
 
 
 # Открытие правил пользования в конце обучения
-@router.callback_query(F.data.in_('rules_from_end_training_notice' 'rules_from_end_training_without_notice'))
+@router.callback_query((F.data == 'rules_from_end_training_notice') | (F.data == 'rules_from_end_training_without_notice'))
 async def open_rules_from_end_training(callback: CallbackQuery):
     await callback.message.edit_text(rules['main_text'],
                                      reply_markup=await button_back_under_rules_from_end_training_builder(

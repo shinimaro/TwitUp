@@ -33,5 +33,5 @@ async def select_workers(workers_dict: dict[int, WorkersDict]) -> dict[int, Work
 # Раз в 10 минут запускает сторожа для просмотра того, что юзер выполнил работы на свой уровень
 async def level_watchman_checker() -> NoReturn:
     while True:
-        await sleep(10 * 60)
+        await sleep(20 * 60)
         await level_watchman()

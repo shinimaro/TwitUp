@@ -19,7 +19,7 @@ class FSMPromocode(StatesGroup):
     create_promocode = State()
 
 
-# Пользователь переходит в меню выполнения задания
+# Пользователь переходит в меню создания задания
 class FSMAddTask(StatesGroup):
     add_task = State()
     add_profile_link = State()
@@ -27,3 +27,16 @@ class FSMAddTask(StatesGroup):
     add_comment_parameters = State()
     add_note = State()
     add_quantity_users = State()
+
+
+class FSMPersonalTask(StatesGroup):
+    add_executions = State()
+
+
+class FSMAdmin(StatesGroup):
+    input_user = State()
+    input_user_balance = State()
+    input_user_priority = State()
+    input_fines_priority = State()
+    input_fines_stb = State()
+    input_message_from_bot = State()

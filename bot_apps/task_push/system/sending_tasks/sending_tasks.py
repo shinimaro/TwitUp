@@ -25,17 +25,18 @@ class TaskInfo(TypedDict):
     price: int | float
 
 
-@router.message(F.text == 'a')
-async def sus(message: Message):
-    a = await db.user_executions_info(1338827549)
-    print(a)
+# @router.message(F.text == 'a')
+# async def sus(message: Message):
+#     a = await db.user_executions_info(1338827549)
+#     print(a)
 
 
 async def sending_task(task_id: int, workers: dict[int, int]) -> None:
-# @router.message(F.text == 'q')
-# async def sus(message: Message):
-#     task_id = 1
-#     workers = {message.from_user.id: 2}
+    pass
+@router.message(F.text == 'q')
+async def sus(message: Message):
+    task_id = 24
+    workers = {message.from_user.id: 2}
     tasks = []
     # Взятие некоторой информации по заданию
     task_info: TaskInfo = await db.get_all_completed_and_price(task_id)
@@ -47,9 +48,6 @@ async def sending_task(task_id: int, workers: dict[int, int]) -> None:
                                              task_info['count_complete'])])
     # Запускаем отправку
     await asyncio.gather(*tasks)
-
-    # Разбронировываем воркеров
-    await db.worker_unbooking(list(workers.keys()))
 
 
 # Отправка пользователю сообщения о таске

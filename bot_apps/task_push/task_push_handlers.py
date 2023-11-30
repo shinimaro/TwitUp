@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from bot_apps.FSM.FSM_states import FSMAddTask, FSMAccounts
 from bot_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.task_push.system.change_task_button import change_task_buttons
+from bot_apps.task_push.system.check_over_refusal import check_over_refusal
 from databases.database import db
 from bot_apps.task_push.system.delete_task_messages import function_distributor_task_messages
 from bot_apps.task_push.system.send_letter_of_happiness import availability_check
@@ -45,9 +46,10 @@ async def process_hide_task(callback: CallbackQuery):
     if callback.data != 'hide_task':
         tasks_msg_id = int(callback.data[10:])
         await db.add_del_time_in_task(tasks_msg_id)
-        await db.add_deleted_status(tasks_msg_id)
+        await db.add_hidden_status(tasks_msg_id)
         await db.add_note_about_hiding(tasks_msg_id)
         await change_task_buttons(tasks_msg_id)
+        await check_over_refusal(tasks_msg_id)
     await bot.delete_message(chat_id=callback.message.chat.id, message_id=callback.message.message_id)
 
 
@@ -148,6 +150,7 @@ async def process_refuse_task(callback: CallbackQuery):
     await db.add_note_about_refuse(tasks_msg_id)
     await db.add_del_time_in_task(tasks_msg_id)
     await change_task_buttons(tasks_msg_id)
+    await check_over_refusal(tasks_msg_id)
     await callback.answer(task_completion['late_refuse_task'])
     await callback.message.delete()
 
@@ -157,6 +160,7 @@ async def process_refuse_task(callback: CallbackQuery):
 async def process_refuse_for_new_task(callback: CallbackQuery):
     tasks_msg_id = int(callback.data[20:])
     await db.del_and_change_status_task(tasks_msg_id, no_first_execution=True)
+    await check_over_refusal(tasks_msg_id)
     await callback.answer(task_completion['late_refuse_task'])
     await callback.message.delete()
 

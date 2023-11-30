@@ -75,8 +75,10 @@ async def full_text_task_builder(tasks_msg_id):
 
 # Билдер самого текста задания
 # Если будешь что-то редачить здесь, в функции ниже надо будет тоже это сделать
-async def context_task_builder(tasks_msg_id: int | str, account: str, not_complete=None) -> str:
-    task_info = await db.open_task(int(tasks_msg_id))
+async def context_task_builder(tasks_msg_id: int | str, account: str, not_complete=None) -> str | None:
+    task_info: dict | False = await db.open_task(int(tasks_msg_id))
+    if task_info is False:
+        return None
     link_action = await db.get_link_action(tasks_msg_id)
     text = f"А вот и комплексное задание🧞\n\n<b>Что обязательно нужно сделать?</b> ({len(task_info['type_task'])} действия):\n\n"
     text += _get_sorted_list(task_info, link_action)

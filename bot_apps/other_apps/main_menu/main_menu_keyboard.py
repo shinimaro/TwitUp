@@ -15,8 +15,11 @@ async def main_menu_builder(tg_id):
     buttons = [IB(text=wordlist.main_menu['buttons'][button],
                   callback_data=button[:-7])
                for button in wordlist.main_menu['buttons']]
+    # Кнопка рабты с заданиями
+    result = await db.check_tasks(tg_id)
+    buttons.insert(0, IB(text=wordlist.main_menu['dop_buttons']['add_task_button'] if not result else wordlist.main_menu['dop_buttons']['personal_tasks_button'], callback_data='add_task' if not result else 'personal_tasks'))
     # Кнопка приёма заданий
-    result = await db.get_all_notifications(tg_id)
+    result: bool = await db.get_all_notifications(tg_id)
     buttons.insert(2, IB(text=('✅ ' if result else '❌ ') + wordlist.main_menu['dop_buttons']['accepting_task_button'],
                          callback_data=f"all_notifications_{'off' if result else 'on'}"))
     # Кнопка перехода в up-chat

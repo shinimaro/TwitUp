@@ -2,7 +2,7 @@ import asyncio
 import os
 import pickle
 import re
-from asyncio import gather, sleep
+from asyncio import gather
 from typing import TypedDict
 
 import aiofiles
@@ -10,11 +10,11 @@ import pyppeteer.errors
 from pyppeteer.browser import Browser
 from pyppeteer.page import Page
 
-from bot_apps.admin_panel.admin_panel_notifications import send_notification_to_admin
+from bot_apps.panels.admin_panel.notification import send_notification_to_admin
 from bot_apps.wordbank import notifications_to_admin
 from config import load_config
 from parsing.main.elements_dictionary import other_blocks, converter, base_links
-from parsing.start_webdriver.webdriver import webdriver, load_base_twitter_url
+from parsing.start_webdriver.webdriver import webdriver
 
 config = load_config()
 
@@ -61,7 +61,6 @@ class Master:
         self.watchman_webdriver['page'] = (await new_driver.pages())[0]
         page: Page = self.watchman_webdriver['page']
         await page.goto(base_links['followers_page'])
-
 
     # Закрытие вебдрайвера через закрытие всех его страниц
     async def close_driver(self, driver: Browser):

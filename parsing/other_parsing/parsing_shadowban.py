@@ -1,58 +1,75 @@
 import asyncio
+import json
+from dataclasses import dataclass
+from random import choice
 
 import aiohttp
-from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 
 
-# Проверить аккаунт на теневой бан
-async def parsing_shadowban(username: str) -> bool | None:
-    # # Инициализация переменных
-    # headers, link = _initialization_of_variables(username)
-    # # Получение html страницы
-    # html_page = await _get_html_page(headers, link)
-    # # Если какие-то проблемы и страница не получена
-    # if not html_page:
-    #     return None
-    # # Проверка на теневой бан
-    # return await _check_shadowban(html_page)
-    return False
+@dataclass(frozen=True, slots=True)
+class BanResponse:
+    ghost_ban: bool      # Сам теневой бан
+    more_replies: bool   # Скрыти ли комментарии за кнопокой "показать больше"
+    search_ban: str      # Поисковый бан
+    search_suggestions: bool  # Тоже поисковый бан, но только в поисковых преждложениях
 
 
-# Иницацлизация хедерса для запроса и линка
-def _initialization_of_variables(username: str) -> tuple[dict[str, str], str]:
-    base_link = 'https://shadowban.yuzurisa.com/'
-    link = base_link + username[1:]
-    headers = {
-        'User-Agent': UserAgent().random,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8'}
-    return headers, link
+def _get_headers():
+    return {
+        'authority': 'shadowban-api.yuzurisa.com:444',
+        'accept': '*/*',
+        'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        'origin': 'https://shadowban.yuzurisa.com',
+        'referer': 'https://shadowban.yuzurisa.com/',
+        'sec-ch-ua': '"Chromium";v="118", "Opera GX";v="104", "Not=A?Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': choice(['Windows', 'Linux', 'Macintosh', 'Android', 'iOS']),
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-site',
+        'user-agent': UserAgent().random}
 
 
-# Получить текст html страницы через aiohttp запрос
-async def _get_html_page(headers: dict[str, str], link: str) -> str | None:
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10), headers=headers) as session:
-            async with session.get(link) as page:
-                return await page.text()
-    except TimeoutError:
-        return None
-    # return '''<body><section class="header section"><div class="row"><div class="col s12"><div class="loadable-container"><h2 id="headerScreenName" data-i18n="common:title" class="">Is <span class="header-screen_name">@svinpeld53831</span><br> shadowbanned on Twitter?</h2></div></div></div><div class="row header-buttons"><div class="col 6"><div class="loadable-container"><button class="btn modal-trigger waves-effect waves white" data-target="donate-modal" data-i18n="common:buttons.support">Support Us</button><div id="donate-thanks" class="hide">Thanks for your support!</div></div></div><div class="col 6"><div class="loadable-container"><button class="btn install-trigger waves-effect waves white" data-i18n="common:buttons.install">Install</button></div></div></div></section><section id="controls" class="row"><div class="col s12 offset-m1 m10 offset-l2 l8 center-align"><div class="loadable-container"><div class="card valign-wrapper"><div class="input-field"><span class="prefix valid">@</span> <input id="screenName" type="text" autocomplete="nickname" required="" pattern="^[A-Za-z0-9_]{1,15}$" data-position="bottom" data-tooltip="Please provide a valid Twitter @handle!" maxlength="15"> <label for="screenName" data-i18n="common:screenNameDefault" class="active">username</label></div><div><button id="check" class="waves-effect waves white btn btn-flat" data-i18n="common:buttons.check">Check</button></div></div></div></div></section><section id="controls" class="row"><div class="col s18 offset-m1 m10 offset-l2 l8 center-align"><div class="loadable-container"><div class="card valign-wrapper" style="background-color: #89cff0;"><p>Is your Twitter account shadowbanned?</p><hr><p>Don't worry, buy a new account from <a href="https://twaccs.com/">twaccs.com</a> and start from scratch.</p></div></div></div></section><section id="results" class="row"><div class="col s12 offset-m1 m10 offset-l2 l8 center-align"><div class="loadable-container"><ul id="tasks" class="collapsible"><li data-task-id="checkUser" data-task-status="warn"><div class="collapsible-header" data-task-component="header" collapsible-non-interactive="" tabindex="0"><i class="material-icons notranslate" data-task-component="icon">contact_support</i><div class="task-message" data-task-component="message"><span>Server error. Please try again later.</span></div></div></li><li data-task-id="checkSuggest" data-task-status="reset" class=""><div class="collapsible-header" data-task-component="header" tabindex="0"><i class="material-icons notranslate" data-task-component="icon">contact_support</i><div class="task-message" data-task-component="message"><span>Search Suggestion Ban</span></div><div class="result-hint" data-task-component="hint"><i class="material-icons">info</i> <i class="material-icons active-indicator">arrow_drop_down</i></div></div><div class="collapsible-body left-align" data-task-component="description" style=""><h5>Search Suggestion Ban</h5><p>This type of ban causes an account to not populate search suggestions and people search results when it is searched for while being logged out. Twitter seems to take <a href="https://en.wikipedia.org/wiki/Social_network_analysis#Metrics" target="_blank" rel="noopener noreferrer">tie strength</a> or a similar metric into account. While an account may be suggested to users you are strongly tied to, it may not be shown to others.</p></div></li><li data-task-id="checkSearch" data-task-status="reset" class=""><div class="collapsible-header" data-task-component="header" tabindex="0"><i class="material-icons notranslate" data-task-component="icon">contact_support</i><div class="task-message" data-task-component="message"><span>Search Ban</span></div><div class="result-hint" data-task-component="hint"><i class="material-icons">info</i> <i class="material-icons active-indicator">arrow_drop_down</i></div></div><div class="collapsible-body left-align" data-task-component="description" style=""><h5>Search Ban</h5><p>This type of ban causes your tweets to be hidden from the search results entirely, no matter whether the quality filter is turned on or off. This behavior includes hashtags as well. This type of ban seems to be temporally limited for active accounts.</p><ul id="searchFAQ" class="collapsible hide" data-task-component="faq"><li class="techInfo"><div class="collapsible-header" tabindex="0"><span>Technical information about the result</span></div><div class="collapsible-body"><p class="techContent"></p></div></li></ul></div></li><li data-task-id="checkConventional" data-task-status="reset" class=""><div class="collapsible-header" data-task-component="header" tabindex="0"><i class="material-icons notranslate" data-task-component="icon">contact_support</i><div class="task'''
-    # return '''<html><head lang="en"><meta charset="utf-8"><title>Twitter Shadowban Test</title><meta description="Determine wether a Twitter user is shadow banned"><meta name="keywords" content="Twitter, Shadowban, Shadowbanned, Ban, Block, Quality Filter, QFD"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1"><meta property="og:title" content="Twitter Shadowban Test"><meta property="og:description" content="Are you shadowbanned on Twitter?"><meta property="og:image" content="https://sb.lv5.ac/img/sm_preview.png"><meta property="og:url" content="https://sb.lv5.ac/"><meta property="og:site_name" content="Twitter Shadowban Test"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image:alt" content="shadwoban.eu"><base target="_blank" href=""><link rel="manifest" href="/manifest.json"><link rel="prefetch" href="./img/gears.svg"><link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500"><link href="https://fonts.googleapis.com/css?family=Lobster" rel="stylesheet"><link rel="shortcut icon" href="favicon.png"><link href="css/app.f3f18c0.css?f3f18c05564fdb0a9afe" rel="stylesheet"></head><body><section class="header section"><div class="row"><div class="col s12"><div class="loadable-container"><h2 id="headerScreenName" data-i18n="common:title" class="">Is <span class="header-screen_name">@testoreque19192</span><br> shadowbanned on Twitter?</h2></div></div></div><div class="row header-buttons"><div class="col 6"><div class="loadable-container"><button class="btn modal-trigger waves-effect waves white" data-target="donate-modal" data-i18n="common:buttons.support">Support Us</button><div id="donate-thanks" class="hide">Thanks for your support!</div></div></div><div class="col 6 hiddendiv"><div class="loadable-container"><button class="btn install-trigger waves-effect waves white" data-i18n="common:buttons.install">Install</button></div></div></div></section><section id="controls" class="row"><div class="col s12 offset-m1 m10 offset-l2 l8 center-align"><div class="loadable-container"><div class="card valign-wrapper"><div class="input-field"><span class="prefix valid">@</span> <input id="screenName" type="text" autocomplete="nickname" required="" pattern="^[A-Za-z0-9_]{1,15}$" data-position="bottom" data-tooltip="Please provide a valid Twitter @handle!" maxlength="15"> <label for="screenName" data-i18n="common:screenNameDefault" class="active">username</label></div><div><button id="check" class="waves-effect waves white btn btn-flat" data-i18n="common:buttons.check">Check</button></div></div></div></div></section><section id="controls" class="row"><div class="col s18 offset-m1 m10 offset-l2 l8 center-align"><div class="loadable-container"><div class="card valign-wrapper" style="background-color: #89cff0;"><p>Is your Twitter account shadowbanned?</p><hr><p>Don't worry, buy a new account from <a href="https://twaccs.com/">twaccs.com</a> and start from scratch.</p></div></div></div></section><section id="results" class="row"><div class="col s12 offset-m1 m10 offset-l2 l8 center-align"><div class="loadable-container"><ul id="tasks" class="collapsible"><li data-task-id="checkUser" data-task-status="ok"><div class="collapsible-header" data-task-component="header" collapsible-non-interactive="" tabindex="0"><i class="material-icons notranslate" data-task-component="icon">check</i><div class="task-message" data-task-component="message"><span><a href="https://twitter.com/testoreque19192" rel="noopener noreferrer">@testoreque19192</a> exists.</span></div></div></li><li data-task-id="checkSuggest" data-task-status="ok" class=""><div class="collapsible-header" data-task-component="header" tabindex="0"><i class="material-icons notranslate" data-task-component="icon">check</i><div class="task-message" data-task-component="message"><span>No search suggestion ban.</span></div><div class="result-hint" data-task-component="hint"><i class="material-icons">info</i> <i class="material-icons active-indicator">arrow_drop_down</i></div></div><div class="collapsible-body left-align" data-task-component="description" style=""><h5>Search Suggestion Ban</h5><p>This type of ban causes an account to not populate search suggestions and people search results when it is searched for while being logged out. Twitter seems to take <a href="https://en.wikipedia.org/wiki/Social_network_analysis#Metrics" target="_blank" rel="noopener noreferrer">tie strength</a> or a similar metric into account. While an account may be suggested to users you are strongly tied to, it may not be shown to others.</p></div></li><li data-task-id="checkSearch" data-task-status="ok"><div class="collapsible-header" data-task-component="header" tabindex="0"><i class="material-icons notranslate" data-task-component="icon">check</i><div class="task-message" data-task-component="message"><span>No search ban.</span></div><div class="result-hint" data-task-component="hint"><i class="material-icons">info</i> <i class="material-icons active-indicator">arrow_drop_down</i></div></div><div class="collapsible-body left-align" data-task-component="description"><h5>Search Ban</h5><p>This type of ban causes your tweets to be hidden from the search results entirely, no matter whether the quality filter is turned on or off. This behavior includes hashtags as well. This type of ban seems to be temporally limited for active accounts.</p><ul id="searchFAQ" class="collapsible" data-task-component="faq"><li class="techInfo"><div class="collapsible-header" tabindex="0"><span>Technical information about the result</span></div><div class="collapsible-body"><p class="techContent">A search ban implies a search suggestion ban. Since the account is not search suggestion banned, it cannot be search banned.</p></div></li></ul></div></li><li data-task-id="checkConventional" data-task-status="ban"><div class="collapsible-header" data-task-component="header" tabindex="0"><i class="material-icons notranslate" data-task-component="icon">error_outline</i><div class="task-message" data-task-component="message"><span>Ghost ban.</span></div><div class="result-hint" data-task-component="hint"><i class="material-icons">info</i> <i class="material-icons active-indicator">arrow_drop_down</i></div></div><div class="collapsible-body left-align" data-task-component="description"><h5>Ghost Ban</h5><p>This is what is referred to as conventional shadowban or thread banning as well. It comprises a search ban while threads are completely ripped apart by hiding reply tweets of the affected user to others. Everything will look perfectly normal to the affected user but many others will not be able to see reply tweets of the affected user at all. Reasons for this ban include behavior like excessive tweeting or following. Again, this type of ban seems to be temporally limited for active accounts.</p><ul id="threadFAQ" class="collapsible" data-task-component="faq"><li class="techInfo"><div class="collapsible-header" tabindex="0"><span>Technical information about the result</span></div><div class="collapsible-body"><p class="techContent">We found <a href="https://twitter.com/i/status/1692431667548528661" rel="noopener noreferrer">a tweet with at least one reply</a> on the user's profile. A <a href="https://twitter.com/i/status/1714310969634021518" rel="noopener noreferrer">reply tweet</a> is detached.</p></div></li></ul></div></li><li data-task-id="checkBarrier" data-task-status="ok"><div class="collapsible-header" data-task-component="header" tabindex="0"><i class="material-icons notranslate" data-task-component="icon">check</i><div class="task-message" data-task-component="message"><span>No reply deboosting detected.</span></div><div class="result-hint" data-task-component="hint"><i class="material-icons">info</i> <i class="material-icons active-indicator">arrow_drop_down</i></div></div><div class="collapsible-body left-align" data-task-component="description"><h5>Reply Deboosting</h5><p>If Twitter's signals determine that an account might engage in harmful behavior, Twitter hides their replies behind a barrier and only loads them when "Show more replies" is clicked. This behavior is personalized, i.e. Twitter does not hide the tweets of accounts you follow. We therefore use an unbiased reference account without followings in order to determine whether tweets within a thread can be retrieved without clicking "Show more replies" from its view. '''
+async def _get_response(username: str) -> BanResponse | None:
+    """Получение ответа от страницы"""
+    async with aiohttp.ClientSession() as session:
+        response = await session.get(f'https://shadowban-api.yuzurisa.com:444/{username}', headers=_get_headers())
+    if response.status == 200:
+        data = (json.loads(await response.text()))['tests']
+        return BanResponse(
+            ghost_ban=data['ghost'].get('ban'),
+            more_replies=data['more_replies'].get('ban'),
+            search_ban=data['search'],
+            search_suggestions=data['typeahead'])
 
 
-# Проверка на теневой бан
-async def _check_shadowban(html_page: str) -> bool | None:
-    soup = BeautifulSoup(html_page, 'lxml')
-    check_user_block = soup.find('li', {'data-task-id': 'checkUser'}).get('data-task-status')
-    # Начальная проверка на то, что аккаунт можно проверить
-    if check_user_block == 'warn':
-        return None
-    tag_check_dict = {1: 'checkSuggest', 2: 'checkSearch', 3: 'checkBarrier'}  # Проверяем ещё 3 из 5 блоков, т.к. один не нужен
-    # Проверяем оставшиеся такие же блоки
-    for tag in tag_check_dict.values():
-        check_block = soup.find('li', {'data-task-id': tag}).get('data-task-status')
-        # Если один из блоков показал, что юзер в бане, то выводим False
-        if check_block == 'ban':
-            return False
-    return True
+def _ban_check(data: BanResponse) -> bool:
+    """
+    Здесь будут храниться условия, по которым будет считаться,
+    аккаунт в теневом бане или нет
+    """
+    return True if not data or (data and not data.ghost_ban) else False
+
+
+async def parsing_shadowban(username: str) -> bool:
+    """Проверить аккаунт на теневой бан"""
+    data: BanResponse | None = await _get_response(username)
+    return _ban_check(data)
+
+
+# # Проверка на теневой бан
+# async def _check_shadowban(html_page: str) -> bool | None:
+#     soup = BeautifulSoup(html_page, 'lxml')
+#     check_user_block = soup.find('li', {'data-task-id': 'checkUser'}).get('data-task-status')
+#     # Начальная проверка на то, что аккаунт можно проверить
+#     if check_user_block == 'warn':
+#         return None
+#     tag_check_dict = {1: 'checkSuggest', 2: 'checkSearch', 3: 'checkBarrier'}  # Проверяем ещё 3 из 5 блоков, т.к. один не нужен
+#     # Проверяем оставшиеся такие же блоки
+#     for tag in tag_check_dict.values():
+#         check_block = soup.find('li', {'data-task-id': tag}).get('data-task-status')
+#         # Если один из блоков показал, что юзер в бане, то выводим False
+#         if check_block == 'ban':
+#             return False
+#     return True

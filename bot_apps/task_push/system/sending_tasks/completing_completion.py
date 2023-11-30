@@ -5,11 +5,14 @@ import random
 import time
 from typing import TypedDict, NoReturn
 from asyncio import sleep
-from bot_apps.task_push.system.sending_tasks.selection_of_workers import book_workers, WorkersDict, \
-    find_total_executions, find_completion_rate
+
+from bot_apps.task_push.system.sending_tasks.selection_of_workers import WorkersDict
+# from bot_apps.task_push.system.sending_tasks.selection_of_workers import book_workers, WorkersDict, \
+#     find_total_executions, find_completion_rate
 from bot_apps.task_push.system.sending_tasks.sending_tasks import sending_task
 from databases.database import db
-from typing import TypeAlias, Callable
+from typing import TypeAlias
+
 
 class TasksDict(TypedDict):
     executions: int
@@ -24,7 +27,9 @@ class SelectedDict(TypedDict):
     total_executions: int
     passed_after_creation: datetime.timedelta
 
+
 Seconds: TypeAlias = int
+
 
 # Фанкшин, проводящий добивку небольших заданий, если они плохо или долго выполняются
 async def completing_completion():
@@ -44,10 +49,11 @@ async def completing_completion():
 async def _select_stuck_tasks(tasks_dict: dict[int, TasksDict]) -> dict[int, SelectedDict]:
     # Ориентир на выполнения - час = 90% выполнений готовы
     selected_tasks_dict = {}
-    completion_rate = await find_completion_rate()
+    # Найти средний процент выполнений до конца за последние 3 дня
+    completion_rate = await db.all_users_executions_info()
     for task in tasks_dict:
         # Ищем процент выполнений
-        total_executions = find_total_executions(tasks_dict[task]['completed_tasks'], tasks_dict[task]['in_process'], completion_rate)
+        total_executions = math.ceil(tasks_dict[task]['completed_tasks'] + tasks_dict[task]['in_process'] * completion_rate)
         completion_percentage = total_executions * (tasks_dict[task]['executions'] / 100)
         # Если таск не добивает по показателям, или, как в самом конце, таск уже делается овер долго
         if completion_percentage <= 5 \
@@ -80,18 +86,6 @@ async def _select_workers(finally_dict: dict[int, int]):
         finally_selected_workers.setdefault(task_id, {})
         # Собираем воркерсов для таска
         workers_dict: dict[int, WorkersDict] = await db.get_all_workers(task_id)
-        # workers_dict = {
-        #     1001: {'priority': 60, 'available_accounts': 15},
-        #     1002: {'priority': 70, 'available_accounts': 15},
-        #     1003: {'priority': 80, 'available_accounts': 15},
-        #     1004: {'priority': 90, 'available_accounts': 15},
-        #     1005: {'priority': 100, 'available_accounts': 15},
-        #     1006: {'priority': 50, 'available_accounts': 15},
-        #     1007: {'priority': 40, 'available_accounts': 15},
-        #     1008: {'priority': 30, 'available_accounts': 15},
-        #     1009: {'priority': 20, 'available_accounts': 15},
-        #     1010: {'priority': 10, 'available_accounts': 15}}
-
         selected_workers: list[int] = []
         for _ in range(finally_dict[task_id]):
             workers_list = list(workers_dict.keys())
@@ -117,8 +111,8 @@ async def _select_workers(finally_dict: dict[int, int]):
 # Функция для финальной отправки тасков
 async def _finish_sending_tasks(finally_selected_workers):
     for task in finally_selected_workers:
-        await book_workers(finally_selected_workers[task])
         await sending_task(task, finally_selected_workers[task])
+
 
 # Класс для сна сторожа
 class WaitingTasks:
@@ -147,13 +141,9 @@ class WaitingTasks:
                 self.start_time = time.time()
 
 
-
-
 async def completing_completion_checker() -> NoReturn:
     waiting_tasks = WaitingTasks(3 * 60, 20 * 60)
     while True:
         await waiting_tasks()
         await completing_completion()
 
-
-asyncio.run(completing_completion_checker())

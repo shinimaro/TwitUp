@@ -1,51 +1,55 @@
 import asyncio
 from asyncio import sleep
+from typing import Literal
 
-from bot_apps.task_push.system.sending_tasks.completing_completion import completing_completion
-from bot_apps.task_push.system.sending_tasks.selection_of_workers import selection_of_workers, \
-    easy_selection_of_workers, strict_selection_of_workers, selection_of_workers_for_round
+from bot_apps.task_push.system.sending_tasks.completing_completion import WaitingTasks
+from bot_apps.task_push.system.sending_tasks.selection_of_workers import SelectionWorkers
 from bot_apps.task_push.system.sending_tasks.sending_tasks import sending_task
 from databases.database import db
 
 
-# Функция, которую я захотел вынести отдельно и которая просто собирает челиксов для выполнения задания и раскидываеn им его
-async def start_task(task_id: int) -> None:
-    # Обязательно подождать перед отправкой заданий
-    await _wait_before_starting()
+# Основная функция по старту таска, которая работает через lock, чтобы никто другой не подключился до конца работы
+async def start_tasks(task_id: int, circular: bool) -> None:
+    if circular:
+        round: Literal[1, 2, 3] = await db.get_next_round_from_task(task_id)
+    if not circular or round != 1:
+        await _wait_before_starting()  # Обязательно подождать перед началом
     async with asyncio.Lock():
-        # Находим опорное количество воркеров и минимально рекомендованное количество аккаунтов
-        count_workers, min_number_accounts = await easy_selection_of_workers(task_id, max_increase=120)
-        # Отбираем воркеров, которые будут выполнять данный таск
-        selection_workers = await selection_of_workers(task_id, count_workers, min_number_accounts)
-        # Раскидываем по воркерам задание
-        await sending_task(task_id, selection_workers)
+        await db.change_task_status_on_bulk_messaging(task_id)
+        if circular:
+            selection_workers = SelectionWorkers(task_id=task_id, max_increase=50)
+            selected_workers: dict[int, int] = await selection_workers.selection_of_workers()
+        else:
+            selection_workers = SelectionWorkers(task_id=task_id, round=round)
+            selected_workers: dict[int, int] = await selection_workers.selection_of_workers_for_round()
+        await sending_task(task_id, selected_workers)
+        await db.change_status_task_on_active(task_id)
 
 
-async def circular_start_task(task_id):
-    round = await db.get_round_from_task(task_id)
-    next_round = round + 1  # Обозначаем для функций то, к какому раунду они должны готовится
-    # Если таск только начат
-    if round == 0:
-        await _wait_before_starting()
-    async with asyncio.Lock():
-        # Получаем нужные строгие значения для круга
-        count_workers, min_number_accounts = await strict_selection_of_workers(task_id, round=next_round)
-        # Отбираем воркерсов
-        selection_workers = selection_of_workers_for_round(task_id, str(round))
-        # Раскидываем всех воркеров на нужный раунд
-        await sending_task(task_id, selection_workers)
-        # Обновляем круг у задания
-        # Обновляем круги у тех воркеров, которых мы взяли
+# Фанкшин, запускающий новый раунд для воркерсов
+async def start_new_round():
+    # Отбор тасков, которым нужен новый раунд (прошло достаточно времени и ещё есть доступные выполнения)
+    info = await db.get_tasks_for_new_round()
+    if info:
+        selection_workers = SelectionWorkers(info['task_id'], info['round'])
+        selected_workers = selection_workers.selection_of_workers_for_round()
+        # await db.change_status_task_on_dop_bulk_messaging(task_id)
 
+        # Придумать как-то, чтобы фанкшин каждый, который отбирает задания, были в локе, т.е. не могли выполняться параллельно
 
-    # Добавить в сторожа тасков, только таски должны отбираться, после того, как прошло N времени и нужный собстна круг или случилось N выполнений
-    # Если круги закончились и время тоже, сторожила должен выбрать самого пиздатого чела на данный момент с самым большим активом и акками, которые могут взять этот таск и позволить ему выполнить на определённое число акков и так по кругу чтобы каждый раз новые челы отбирались надо
-    # Засунуть в принятия заданий проверку, что не было добито N заданий и не нужно выпускать новый круг
-    # Если нужно сделать новый круг, то обращаемся к фанкшину circular_start_task и он опять делает всё тоже самое
-
-    pass
+        # Добавить в сторожа тасков, только таски должны отбираться, после того, как прошло N времени и нужный собстна круг или случилось N выполнений
+        # Если круги закончились и время тоже, сторожила должен выбрать самого пиздатого чела на данный момент с самым большим активом и акками, которые могут взять этот таск и позволить ему выполнить на определённое число акков и так по кругу чтобы каждый раз новые челы отбирались надо
+        # Засунуть в принятия заданий проверку, что не было добито N заданий и не нужно выпускать новый круг
+        # Если нужно сделать новый круг, то обращаемся к фанкшину circular_start_task и он опять делает всё тоже самое
 
 
 async def _wait_before_starting():
     await sleep(25)
+
+
+async def start_new_round_checker():
+    waiting_tasks = WaitingTasks(2 * 60, 15 * 60)
+    while True:
+        await waiting_tasks()
+        await start_new_round()
 

@@ -3,7 +3,7 @@ from aiogram.types import InlineKeyboardButton as IB
 
 from bot_apps.wordbank.wordlist import help_center, BACK_MAIN_MENU, BACK
 from config.config import load_config
-
+from random import choice
 config = load_config()
 
 
@@ -14,7 +14,7 @@ async def help_center_kb_builder():
         IB(text=help_center['buttons']['question-answer_button'],
            callback_data='question-answer'),
         IB(text=help_center['buttons']['message_support_button'],
-           url=f"tg://resolve?domain={config.tg_bot.support_name}"),
+           url=f"tg://resolve?domain={choice(list(config.tg_bot.support_ids))}"),
         IB(text=BACK_MAIN_MENU,
            callback_data='back_to_main_menu'), width=1)
     return help_center_kb.as_markup()

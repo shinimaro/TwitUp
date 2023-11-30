@@ -25,7 +25,7 @@ router.message.filter(IsBanned())
 
 
 # Начало создания промокода
-@router.callback_query(F.data.in_('not_promocode' 'back_to_create_promocode'))
+@router.callback_query((F.data == 'not_promocode') | (F.data == 'back_to_create_promocode'))
 async def process_add_promocode(callback: CallbackQuery, state: FSMContext):
     if not await db.check_pass_ref_office(callback.from_user.id):
         await callback.message.edit_text(referral_office['preliminary_text'],
@@ -37,7 +37,7 @@ async def process_add_promocode(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь собирается вводить промокод
-@router.callback_query(F.data.in_('create_promocode' 'change_promocode'))
+@router.callback_query((F.data == 'create_promocode') | (F.data == 'change_promocode'))
 async def process_create_promocode(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(referral_office['creation_promocode']['what_the_name'],
                                      reply_markup=await button_back_under_insert_promocode_builder())
@@ -75,7 +75,7 @@ async def process_save_new_promocode(callback: CallbackQuery, state: FSMContext)
 
 
 # Пользователь открыл реферальный кабинет
-@router.callback_query(F.data.in_('ref_office' 'back_to_ref_office'))
+@router.callback_query((F.data == 'ref_office') | (F.data == 'back_to_ref_office'))
 async def process_open_ref_office(callback: CallbackQuery, state: FSMContext):
     promocode = await db.get_promocode(callback.from_user.id)
     # Если у пользователя нет промокода, запускается процесс, в котором мы предлагаем ему создать его

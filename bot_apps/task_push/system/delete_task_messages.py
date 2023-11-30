@@ -1,5 +1,4 @@
 import asyncio
-from asyncio import sleep
 
 from aiogram import Bot
 
@@ -7,7 +6,7 @@ from bot_apps.filters.limits_filters.callback_limit_filter import CallbackFilter
 from bot_apps.filters.limits_filters.message_limit_filter import MessageFilter
 from bot_apps.task_push.system.change_task_button import change_task_buttons
 from databases.database import db
-from bot_apps.adding_task.adding_task_keyboards import completed_task_keyboard_builder
+from bot_apps.personal_task.adding_task.adding_task_keyboards import completed_task_keyboard_builder
 from bot_apps.task_push.task_push_keyboards import ok_button_two_builder
 from bot_apps.task_push.task_push_text import chain_letter_builder
 from bot_apps.wordbank import task_completion, add_task
@@ -31,15 +30,10 @@ async def function_distributor_task_messages(tasks_msg_id):
             tasks.extend([delete_message(info_dict[key], int(key[13:]))])
         else:
             tasks.extend([edit_message(info_dict[key], int(key[13:]))])
-        if len(tasks) == 30:
-            await asyncio.gather(*tasks)
-            tasks = []
-            await sleep(0.5)
-    else:
-        await asyncio.gather(*tasks)
+    await asyncio.gather(*tasks)
 
 
-# Сама функция для удаления
+# Функция для удаления
 async def delete_message(info_dict, tasks_msg_id):
     await db.change_priority_ignore_task(tasks_msg_id)  # Понижение приоритета юзера
     await db.update_status_on_fully_completed(tasks_msg_id)  # Изменить статус задания
@@ -78,9 +72,7 @@ async def send_message_founder(tasks_msg_id):
                         'likes': f'<b>+{executions} лайков (пост)</b>',
                         'retweets': f'<b>+{executions} ретвитов (пост)</b>',
                         'comments': f'<b>+{executions} комментариев (пост)</b>'}
-        actions_text = ''
-        for action in actions:
-            actions_text += actions_dict[action] + '\n'
+        actions_text = ''.join([actions_dict[action] + '\n' for action in actions])
         await message_filter(user_id=founder_id)
         await bot.send_message(
             chat_id=founder_id,

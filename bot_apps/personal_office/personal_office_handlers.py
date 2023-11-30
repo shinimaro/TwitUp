@@ -34,7 +34,7 @@ router.message.filter(IsBanned())
 
 
 # Пользователь вошёл в личный кабинет
-@router.callback_query(F.data.in_('personal_account' 'back_to_personal_account'))
+@router.callback_query((F.data == 'personal_account') | (F.data == 'back_to_personal_account'))
 async def process_open_personal_account(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await personal_account_text_builder(callback.from_user.id),
                                      reply_markup=await personal_account_builder(callback.from_user.id))
@@ -195,38 +195,25 @@ async def adding_account(message: Message, state: FSMContext):
 @router.callback_query(F.data == 'confirm_add')
 async def process_check_account(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    try:
-        await callback.message.edit_text(accounts['examination'].format(data.get('account')))
-    except TelegramBadRequest:
-        pass
+    await callback.message.edit_text(accounts['examination'].format(data.get('account')))
     await sleep(2)
-    all_users = await all_our_users.get_all_our_users()
+    # all_users = await all_our_users.get_all_our_users()
     # Если не удалось найти аккаунт в подписках нашего твиттер аккаунта
-    print('Проверяю аккаунт ', data.get('account'), ' в этом списке ', all_users)
-    if not data.get('account') in all_users:
+    # if not data.get('account') in all_users:
+    result = True
+    if not result:
         await callback.message.edit_text(accounts['fail_check'].format(data.get('account')[1:]),
                                          reply_markup=await not_add_account_builder(),
                                          disable_web_page_preview=True)
     # Если аккаунт найден, то бот открывает функция для его проверки на теневой бан
-    elif await parsing_shadowban(data.get('account')) is False:
+    elif await parsing_shadowban(data['account']) is False:
         await callback.message.edit_text(accounts['shadow_ban'].format(data.get('account')[1:]),
                                          reply_markup=await shadow_ban_builder(),
                                          disable_web_page_preview=True)
 
     # Если аккаунт найден в подписках
     else:
-        # Функция, которая добавляет всю необходимую информацию в аккаунт (уже не добавляет, можно удалять её)
         result = await add_new_account(callback.from_user.id, data.get('account'))
-        # result_add = await add_new_account(callback.from_user.id, data.get('account'))
-        # # Если вернулось сообщение о том, что ещё рано обновлять аккаунт, т.к. не прошло нужное количество времени
-        # # Это сделано на случай, если пользователь удалит аккаунт и сразу попробует добавить его снова для обновления его данных
-        # if not isinstance(result_add, dict):
-        #     await callback.message.edit_text(result_add, reply_markup=await account_added_successfully_builder())
-        # # Если вернулся словарь с информацией об аккаунте
-        # else:
-        #     await callback.message.edit_text(accounts['account_added'].format(data.get('account'), result_add['date_of_registration'], result_add.get('followers', 0), result_add.get('subscribers', 0), result_add.get('posts', 0), result_add.get('retweets', 0), 0, 0, 0, result_add.get('level', 1), 0, 0, 0, 0),
-        #                                      reply_markup=await account_added_successfully_builder())
-
         if result:
             await callback.message.edit_text(accounts['account_added_2'].format(data.get('account')),
                                              reply_markup=await account_added_successfully_builder())
@@ -313,7 +300,7 @@ async def process_open_personal_statistics(callback: CallbackQuery):
 
 
 # Пользователь открывает свою историю заданий
-@router.callback_query(F.data.in_('task_history' 'history_accounts'))
+@router.callback_query((F.data == 'task_history') | (F.data == 'history_accounts'))
 async def open_task_history(callback: CallbackQuery, state: FSMContext):
     # Сбор всех аккаунтов, с которых были сделаны задания
     accounts_list = await db.check_completed_task(callback.from_user.id)
@@ -387,7 +374,7 @@ async def open_history_list_page(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь пополняет свой баланс из личного кабинета
-@router.callback_query(F.data.in_('pay' 'pay_from_add_task'))
+@router.callback_query((F.data == 'pay') | (F.data == 'pay_from_add_task'))
 async def process_start_pay(callback: CallbackQuery, state: FSMContext):
     # Записать функцию, которая будет выдавать курс доллара и по-прошествию дня, добавлять новый курс
     # dollar = func()
