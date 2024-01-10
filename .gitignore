@@ -1,6 +1,4 @@
 .env
-README.txt
-test.py
 accounts.txt
 
 .mypy_cache/

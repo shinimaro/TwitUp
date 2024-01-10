@@ -2,10 +2,9 @@ import asyncio
 import time
 
 from pyppeteer.page import Page
-from asyncio import sleep
-from parsing.main.elements_dictionary import subscribers_blocks, converter
-from parsing.main.master_function import Master
-from parsing.main.parsing_functions.find_functions import find_all_users
+from parsing.elements_storage.elements_dictionary import subscribers_blocks, converter
+from parsing.manage_webdrivers.master_function import Master
+from parsing.parsing_functions.find_functions import find_all_users
 
 
 class AllOurUsers:
@@ -17,8 +16,9 @@ class AllOurUsers:
     common_page: Page = None
     master = Master()
 
-    # Генератор, в котором содержатся последние пепещики и, если прошло уже достаточно времени, он обновляет пепещикав
     async def get_all_our_users(self):
+        """Генератор, в котором содержатся последние пепещики и,
+        если прошло уже достаточно времени, он обновляет пепещиков"""
         if time.time() - self.last_update_time >= self.seconds_waiting and \
                 not self.all_our_users_lock.locked():  # Если прошло много секунд с последнего апдейта и в данный момент не производится новый апдейт
             all_users = await self.parsing_our_subscribers()
@@ -27,8 +27,8 @@ class AllOurUsers:
         else:
             return self.all_our_users
 
-    # Функция для парсинга наших подписчиков
     async def parsing_our_subscribers(self):
+        """Функция для парсинга наших подписчиков"""
         async with self.all_our_users_lock:
             try:
                 async with asyncio.timeout(30):
@@ -50,8 +50,8 @@ class AllOurUsers:
             finally:
                 return self.all_our_users
 
-    # Обновление страницы с пепещиками
     async def _update_page(self, element: str):
+        """Обновление страницы с пепещиками"""
         timeout = 6000
         while timeout < 10000:
             try:
@@ -60,6 +60,6 @@ class AllOurUsers:
                 return True
             except TimeoutError:
                 timeout += 4000
-        # Если всё же страница не обновилась
+        # Если всё же страница не обновилась, обновляем сторожевой вебдрайвер
         await self.master.update_watchman_webdriver()
         return False

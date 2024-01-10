@@ -1,14 +1,13 @@
 import asyncio
-from asyncio import sleep
 from typing import Literal
 
 from bs4 import BeautifulSoup
 from pyppeteer.browser import Browser
 from pyppeteer.page import Page
 
-from parsing.main.elements_dictionary import post_blocks, profile_blocks
-from parsing.main.master_function import Master
-from parsing.main.parsing_functions.page_Interaction import PageInteraction
+from parsing.elements_storage.elements_dictionary import post_blocks, profile_blocks
+from parsing.manage_webdrivers.master_function import Master
+from parsing.parsing_functions.page_Interaction import PageInteraction
 
 
 # Проверка поста/аккаунта на то, что он существует на самом деле
@@ -55,6 +54,7 @@ async def _return_driver(driver: Browser) -> None:
 async def _return_broke_driver(driver: Browser) -> None:
     master = Master()
     await master.give_broke_driver(driver)
+
 
 # Выдать html страничку
 async def _get_html_page(page: Page, link: str) -> str:
