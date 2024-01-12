@@ -30,14 +30,13 @@ class StartChecking(BaseStartChecking):
         await self._set_check_executions()
         await self._set_need_args_for_parsing()
         self._full_out_tasks_list()
-
         try:
             async with asyncio.timeout(35):
-                self._full_out_tasks_list()
                 await gather(*self.tasks)
                 self._return_driver()
                 return self.actions_dict
         except asyncio.TimeoutError:
+            self.closed_all_tasks()
             if self._check_failure():
                 self._apply_default_completion_to_all()
             else:
@@ -69,9 +68,11 @@ class StartChecking(BaseStartChecking):
 
     def _full_out_tasks_list(self) -> None:
         """Заполнить список задач для их параллельного запуска"""
-        for action in self.actions_dict:
-            page = self.page_list.pop(0)
-            self.tasks.extend([self.parsing_args.functions_dict[action](page, *self.parsing_args.parsing_args[action])])
+        # for action in self.actions_dict:
+        #     page = self.page_list.pop(0)
+        #     self.tasks.extend([self.parsing_args.functions_dict[action](page, *self.parsing_args.parsing_args[action])])
+        self.tasks.extend(self.parsing_args.functions_dict[action](self.page_list.pop(0), *self.parsing_args.parsing_args[action]) for action in self.actions_dict)
+        # self.tasks.extend([self.parsing_args.functions_dict[action](self.page_list.pop(0), *self.parsing_args.parsing_args[action]) for action in self.actions_dict])
 
     def _set_failure_check(self):
         """Установка того, что проверка не удалась"""

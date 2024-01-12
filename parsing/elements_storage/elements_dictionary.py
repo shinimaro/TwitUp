@@ -8,7 +8,7 @@ base_links = {
     # Страница, через которую предпочтительнее логиниться
     'login_page': 'https://twitter.com/i/flow/login',
     # Страница для просмотра всех наших пепещиков, но пока аккаунта нужного нет
-    'followers_page': f'https://twitter.com/{"elonmusk"}/followers'
+    'followers_page': f'https://twitter.com/{"JJKcontents"}/followers'
 }
 
 

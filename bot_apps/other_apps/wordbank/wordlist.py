@@ -14,15 +14,17 @@ commands = {
 
 # Главное меню
 main_menu = {
-    'main_text': 'Я бот парсерочек и я парсю всё что вижу\n\n',
+    'main_text': 'Я бот парсерочек и я парсю всё что вижу\n',
     'account_statistics': {
-        'main_text': '<b>Статистика аккаунта на <code>{0}</code></b>\n<b>Заданий получено за сегодня:</b> <code>{1}</code>\n<b>Заданий принято и выполнено:</b> <code>{2}</code>\n<b>Твой приоритет:</b> <code>{3}</code>\n',
+        'main_text': '\n<b>Статистика аккаунта на <code>{0}</code></b>',
+        'sent_tasks': '\n<b>Заданий получено за сегодня:</b> <code>{0}</code>\n<b>Заданий принято и выполнено:</b> <code>{1}</code>',
         'fines_type': {
-            'main_text': '<b>Штрафы на аккаунте:</b> ',
+            'main_text': '\n<b>Штрафы на аккаунте:</b> ',
             'not_fines': '<code>отсутствуют</code>\n',
             'bought_fines': '<code>порез <b>{0}%</b> от получаемых наград до отработки <b>{1}</b> $STB</code>\n',
             'temporary_fines': '<code>небольшое понижение приоритета до <b>{0}</b></code>\n'},
         'proirity_type': {
+            'main_text': '\n<b>Твой приоритет:</b> <code>{0}</code>',
             'top_priority': 'наивысший',
             'over_high_priority': 'очень высокий',
             'high_priority': 'довольно высокий',

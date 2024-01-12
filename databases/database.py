@@ -68,7 +68,8 @@ class Database:
     # Получить главный интерфейс
     async def get_main_interface(self, tg_id):
         async with self.pool.acquire() as connection:
-            return (await connection.fetchrow('SELECT message_id FROM main_interface WHERE telegram_id = $1', tg_id))['message_id']
+            return await connection.fetchval('SELECT message_id FROM main_interface WHERE telegram_id = $1', tg_id)
+
 
     # Обновить главное сообщение
     async def update_main_interface(self, tg_id, message_id):
@@ -2827,8 +2828,11 @@ class Database:
     # Получить некоторую статистику по аккаунту для главного меню
     async def get_some_statistics_account(self, tg_id) -> InfoForMainMenu:
         async with self.pool.acquire() as connection:
-            info = await connection.fetchrow("SELECT (SELECT COUNT(*) FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE offer_time AT TIME ZONE 'Europe/Moscow' >= DATE_TRUNC('days', current_timestamp AT TIME ZONE 'Europe/Moscow') AND telegram_id = $1) as number_sent_tasks, (SELECT COUNT(*) FROM completed_tasks WHERE date_of_completion AT TIME ZONE 'Europe/Moscow' >= DATE_TRUNC('days', current_timestamp AT TIME ZONE 'Europe/Moscow') AND telegram_id = $1) as number_completed_tasks, (SELECT priority FROM tasks_distribution WHERE telegram_id = $1), (SELECT top_priority_flag FROM tasks_distribution WHERE telegram_id = $1), (SELECT GREATEST(SUM(remaining_to_redeem) - SUM(already_bought), 0) as sum_fines_stb FROM bought JOIN fines USING(fines_id) WHERE telegram_id = $1 AND collection_flag = False), (SELECT COALESCE(MAX(awards_cut), 100) as awards_cut FROM bought JOIN fines USING(fines_id) WHERE telegram_id = $1 AND collection_flag = True), (SELECT COALESCE(SUM(reduction_in_priority), 0) FROM temporary JOIN fines USING(fines_id) WHERE valid_until > NOW() AND telegram_id = $1) as sum_fines_priority;", tg_id)
+            # Добавить проверку, что юзер не новичок, если новичок, то будет только текст о штрафе + проверить, есть ли 1 аккаунт хотя бы, если есть, то будет текст о том ,что он вне приоритета
+            info = await connection.fetchrow("SELECT (SELECT COUNT(*) FROM tasks_messages WHERE telegram_id = $1) as total_sent_task, COALESCE((SELECT COUNT(*) FROM accounts WHERE deleted = False AND telegram_id = $1), 0) as number_accounts, (SELECT COUNT(*) FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE offer_time AT TIME ZONE 'Europe/Moscow' >= DATE_TRUNC('days', current_timestamp AT TIME ZONE 'Europe/Moscow') AND telegram_id = $1) as number_sent_tasks, (SELECT COUNT(*) FROM completed_tasks WHERE date_of_completion AT TIME ZONE 'Europe/Moscow' >= DATE_TRUNC('days', current_timestamp AT TIME ZONE 'Europe/Moscow') AND telegram_id = $1) as number_completed_tasks, COALESCE((SELECT priority FROM tasks_distribution WHERE telegram_id = $1), 0) as priority, COALESCE((SELECT top_priority_flag FROM tasks_distribution WHERE telegram_id = 1338827549), True) as top_priority_flag, (SELECT GREATEST(SUM(remaining_to_redeem) - SUM(already_bought), 0) as sum_fines_stb FROM bought JOIN fines USING(fines_id) WHERE telegram_id = $1 AND collection_flag = False), (SELECT COALESCE(MAX(awards_cut), 100) as awards_cut FROM bought JOIN fines USING(fines_id) WHERE telegram_id = $1 AND collection_flag = True), (SELECT COALESCE(SUM(reduction_in_priority), 0) FROM temporary JOIN fines USING(fines_id) WHERE valid_until > NOW() AND telegram_id = $1) as sum_fines_priority", tg_id)
             return InfoForMainMenu(
+                total_sent_task=info['total_sent_task'],
+                number_accounts=info['number_accounts'],
                 number_sent_tasks=info['number_sent_tasks'],
                 number_completed_tasks=info['number_completed_tasks'],
                 priority=info['priority'],

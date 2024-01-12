@@ -11,12 +11,17 @@ db = Database()
 
 async def main_info_about_user(tg_id: int) -> str:
     """Выдаёт некоторую информацию о юзере в главном меню"""
+    text = main_menu['main_text']
     account_info: InfoForMainMenu = await db.get_some_statistics_account(tg_id)
-    return main_menu['main_text'] + main_menu['account_statistics']['main_text'].format(
-        _get_correct_date_now(),
-        account_info.number_sent_tasks,
-        account_info.number_completed_tasks,
-        _get_priority_type_text(account_info)) + _text_abuot_user_fines(account_info)
+    if account_info.number_accounts < 1:
+        if account_info.sum_fines_stb:
+            text += _text_about_user_fines(account_info)
+    else:
+        text += main_menu['account_statistics']['main_text'].format(_get_correct_date_now())
+        text += _sent_tasks_text(account_info)
+        text += _priority_text(account_info)
+        text += _text_about_user_fines(account_info)
+    return text
 
 
 def _get_correct_date_now() -> str:
@@ -27,7 +32,7 @@ def _get_correct_date_now() -> str:
     return datetime.now(pytz.timezone('Europe/Moscow')).strftime(f"%#d {date_dict[datetime.now().month]}")
 
 
-def _get_priority_type_text(account_info: InfoForMainMenu) -> str:
+def _priority_text(account_info: InfoForMainMenu) -> str:
     """Текст о том, какой у юзера приоритет"""
     priority_dict = {lambda x: x.top_priority: main_menu['account_statistics']['proirity_type']['top_priority'],
                      lambda x: x.priority >= 80: main_menu['account_statistics']['proirity_type']['over_high_priority'],
@@ -37,10 +42,17 @@ def _get_priority_type_text(account_info: InfoForMainMenu) -> str:
                      lambda x: x.priority >= 0: main_menu['account_statistics']['proirity_type']['low_prioryty']}
     for func in priority_dict:
         if func(account_info):
-            return priority_dict[func]
+            return main_menu['account_statistics']['proirity_type']['main_text'].format(priority_dict[func])
 
 
-def _text_abuot_user_fines(account_info: InfoForMainMenu) -> str:
+def _sent_tasks_text(account_info: InfoForMainMenu) -> str:
+    """Текст об отправленных тасках юзеру"""
+    return main_menu['account_statistics']['sent_tasks'].format(
+        account_info.number_sent_tasks,
+        account_info.number_completed_tasks)
+
+
+def _text_about_user_fines(account_info: InfoForMainMenu) -> str:
     """Текст о действующих штрафах юзера"""
     main_text = main_menu['account_statistics']['fines_type']['main_text']
     if account_info.sum_fines_stb:

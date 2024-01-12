@@ -4,7 +4,6 @@ from typing import NoReturn
 from aiogram import Dispatcher, Bot
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
-from aiogram import methods
 
 from bot_apps.bot_parts.adding_task import adding_task_handlers
 from bot_apps.bot_parts.help_center import help_center_handlers
@@ -18,18 +17,17 @@ from bot_apps.bot_parts.personal_tasks import personal_task_handlers
 from bot_apps.bot_parts.task_push import task_push_handlers
 from bot_apps.bot_parts.task_setting import task_setting_handlers
 from bot_apps.other_apps.errors import errors_handlers
-from bot_apps.other_apps.systems_tasks.watchmans.completing_completion import completing_completion_checker
-from bot_apps.other_apps.systems_tasks.watchmans.re_check_of_execution import ReCheckExecution
-from bot_apps.other_apps.systems_tasks.watchmans.task_setting_reminder import function_distributor_reminders
 from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.filters.ban_filters.they_banned import TheyBanned
 from bot_apps.other_apps.other_handlers import other_handlers
-from bot_apps.other_apps.systems_tasks.sending_tasks import sending_tasks
 from bot_apps.other_apps.systems_tasks.watchmans.checking_tasks import main_task_checker
+from bot_apps.other_apps.systems_tasks.watchmans.completing_completion import completing_completion_checker
 from bot_apps.other_apps.systems_tasks.watchmans.fines_collector import check_fines_collector
 from bot_apps.other_apps.systems_tasks.watchmans.launch_new_rounds import launch_new_rounds_checker
 from bot_apps.other_apps.systems_tasks.watchmans.level_watchman import level_watchman_checker
 from bot_apps.other_apps.systems_tasks.watchmans.priority_updater import priority_updater_checker
+from bot_apps.other_apps.systems_tasks.watchmans.re_check_of_execution import ReCheckExecution
+from bot_apps.other_apps.systems_tasks.watchmans.task_setting_reminder import function_distributor_reminders
 from bot_apps.other_apps.systems_tasks.watchmans.update_task_limits import update_limits_tasks
 from bot_apps.other_apps.wordbank import commands
 from config.config import load_config
@@ -59,7 +57,7 @@ async def _start_bot() -> NoReturn:
     dp = Dispatcher(storage=storage)
     print('Бот работает')
     dp.include_router(main_menu_handlers.router)  # Поставлен фильтр на сообщения
-    # dp.include_router(sending_tasks.router)  # Убрать
+    # dp.include_router(sending_task.router)  # Убрать
     dp.include_router(task_push_handlers.router)
     dp.include_router(personal_task_handlers.router)
     dp.include_router(admin_panel_handlers.router)

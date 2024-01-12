@@ -423,6 +423,8 @@ class AuthorTaskInfo:
 
 @dataclass(frozen=True, slots=True)
 class InfoForMainMenu:
+    total_sent_task: int
+    number_accounts: int
     number_sent_tasks: int
     number_completed_tasks: int
     priority: int

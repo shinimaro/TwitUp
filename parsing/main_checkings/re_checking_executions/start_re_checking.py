@@ -29,7 +29,6 @@ class StartReChecking(BaseStartChecking):
         await self._initialize_attributes()
         await self._set_re_check_execution()
         await self._set_need_args_for_re_checking()
-
         try:
             async with asyncio.timeout(3 * 60):
                 self._full_out_tasks_list()
@@ -37,6 +36,7 @@ class StartReChecking(BaseStartChecking):
                 self._return_driver()
                 return self._final_check()
         except asyncio.TimeoutError:
+            self.closed_all_tasks()
             self._return_driver()  # Т.к. машина может проверять очень долго и это не обязательно должен быть сбой драйвера, то возвращаем его таким же, какой и был, а не как сломанный
             if self._check_failure():
                 return False

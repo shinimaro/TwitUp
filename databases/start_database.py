@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 from asyncio import gather
 from typing import Callable
@@ -37,7 +38,10 @@ class StartDB:
     async def _create_all_tabels(self):
         """Создание всех таблиц"""
         create_methods_list: list[Callable] = self._get_create_table_methods()
-        await gather(*[coroutine(self) for coroutine in create_methods_list])
+        main_tables_list = ['users', 'tasks', 'fines', 'accounts', 'tasks_messages']
+        await gather(*[coroutine(self) for coroutine in create_methods_list if coroutine.__name__[7:-6] in main_tables_list])
+        await gather(*[coroutine(self) for coroutine in create_methods_list if not coroutine.__name__[7:-6] in main_tables_list])
+
 
     async def _set_initial_values(self):
         """Установка начальных значения, которые сейчас есть"""
@@ -683,6 +687,17 @@ class StartDB:
                                          'payment_amount REAL,'
                                          'date_of_payment TIMESTAMP WITH TIME ZONE DEFAULT NOW());')
 
+    async def initial_prices_actions_values(self):
+        async with self.pool.acquire() as connection:
+            if not await connection.fetchval('SELECT EXISTS (SELECT 1 FROM prices_actions)'):
+                await connection.execute('INSERT INTO prices_actions('
+                                         'subscriptions,'
+                                         'likes,'
+                                         'retweets,'
+                                         'comments,'
+                                         'commission)'
+                                         'VALUES (1, 1, 1, 3, 3)')
+
     async def initial_limits_tasks_values(self):
         async with self.pool.acquire() as connection:
             if not await connection.fetchval('SELECT EXISTS (SELECT 1 FROM limits_tasks)'):
@@ -766,6 +781,13 @@ class StartDB:
                                          'challenger,'
                                          'champion) '
                                          'VALUES (1, 1, 3, 5)')
+
+    async def initial_cost_stb_values(self):
+        async with self.pool.acquire() as connection:
+            if not await connection.fetchval('SELECT EXISTS (SELECT 1 FROM cost_stb)'):
+                await connection.execute('INSERT INTO cost_stb('
+                                         'cost_to_dollar)'
+                                         'VALUES (1);')
 
     async def initial_level_loss_conditions_values(self):
         async with self.pool.acquire() as connection:

@@ -63,6 +63,11 @@ class BaseStartChecking:
         """Запустить корутину по сдаче драйвера обратно"""
         asyncio.get_event_loop().create_task(self.master.give_driver(self.driver))
 
+    def closed_all_tasks(self) -> None:
+        """Закрыть выполнение всех задач"""
+        for corutine in self.tasks:
+            corutine.close()
+
     def _return_broke_driver(self) -> None:
         """Запустить корутину по сдаче сломанного драйвера"""
         asyncio.get_event_loop().create_task(self.master.give_broke_driver(self.driver))

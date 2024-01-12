@@ -6,6 +6,7 @@ from pyppeteer.page import Page
 from parsing.elements_storage.elements_dictionary import subscribers_blocks, converter
 from parsing.manage_webdrivers.master_function import Master
 from parsing.parsing_functions.find_functions import find_all_users
+from parsing.parsing_functions.page_Interaction import PageInteraction
 
 
 class AllOurUsers:
@@ -40,11 +41,13 @@ class AllOurUsers:
                             self.common_page: Page = self.master.watchman_webdriver['page']  # Обновляем страницу
                             continue
                         users = set()
-                        while len(users) < 15:
-                            await asyncio.sleep(1)
+                        while len(users) < 30:
+                            parsing_interaction = PageInteraction(self.common_page, '')  # Потом убрать
+                            await parsing_interaction.scroll()
                             html = await self.common_page.content()
                             users.update(await find_all_users(html, self.common_page))
                         self.all_our_users = users
+                        break
             except TimeoutError:
                 pass
             finally:

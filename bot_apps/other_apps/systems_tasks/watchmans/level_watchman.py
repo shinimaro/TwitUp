@@ -39,10 +39,3 @@ async def level_watchman_checker() -> NoReturn:
     while True:
         await sleep(20 * 60)
         await level_watchman()
-
-
-async def sus():
-    await db.connect()
-    await level_watchman()
-
-asyncio.get_event_loop().run_until_complete(sus())
