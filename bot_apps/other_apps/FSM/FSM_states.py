@@ -8,6 +8,8 @@ class FSMAccounts(StatesGroup):
     rename_account = State()
     add_first_account = State()
     check_account = State()
+    payment_state = State()
+    generation_wallet = State()
 
 
 # Пользователь может оставить отзыв
@@ -30,10 +32,12 @@ class FSMAddTask(StatesGroup):
     add_quantity_users = State()
 
 
+# Состояния для работы с созданными заданиями
 class FSMPersonalTask(StatesGroup):
     add_executions = State()
 
 
+# Состояния для админ панели
 class FSMAdmin(StatesGroup):
     input_user = State()
     input_user_balance = State()
@@ -71,6 +75,7 @@ class FSMAdmin(StatesGroup):
     input_price_to_commission = State()
 
 
+# Состояния для сапорт панели
 class FSMSupport(StatesGroup):
     input_user = State()
     input_user_balance = State()

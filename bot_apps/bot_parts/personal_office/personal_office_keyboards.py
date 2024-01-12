@@ -135,7 +135,6 @@ def add_account_builder() -> IM:
     return add_account.as_markup()
 
 
-
 # Пользователь зафейлил проверку
 def not_add_account_builder(attempt=1) -> IM:
     not_add_account = BD()
@@ -158,7 +157,6 @@ def not_rename_account_builder(account_name) -> IM:
                     callback_data='try_rename_again'),
                  _get_back_to_account_button(account_name), width=1)
     return keyboard.as_markup()
-
 
 
 # Клавиатура под сообщением о теневом бане
@@ -239,32 +237,56 @@ def button_back_personal_office_builder() -> IM:
 
 
 # Клавиатура для пополнения личного кабинета
-def payment_keyboard_builder() -> IM:
+async def payment_keyboard_builder(tg_id, data: str) -> IM:
     payment_keyboard = BD()
-    payment_keyboard.row(
-        *[IB(text=text, callback_data=button[:-7])
-          for button, text in payment['buttons']['pay_method'].items()], width=1)
-    payment_keyboard.row(
-        IB(text=BACK_PERSONAL_ACCOUNT,
-           callback_data='back_to_personal_account'))
-    return payment_keyboard.as_markup()
+    if not await db.check_generated_wallet(tg_id):
+        payment_keyboard.row(
+            IB(text=payment['buttons']['generation_wallet_button'],
+               callback_data='generation_wallet'))
+    else:
+        payment_keyboard.row(
+            IB(text=payment['buttons']['go_to_generation_wallet_button'],
+               callback_data='go_to_generation_wallet'))
 
-
-def pay_from_add_task_builder(first_pay=None) -> IM:
-    first_pay_from_add_task = BD()
-    first_pay_from_add_task.row(
-        *[IB(text=text, callback_data=button[:-7])
-          for button, text in payment['buttons']['pay_method'].items()], width=1)
-    if first_pay:
-        first_pay_from_add_task.row(
+    if data == 'pay':
+        payment_keyboard.row(
+            IB(text=BACK_PERSONAL_ACCOUNT,
+               callback_data='back_to_personal_account'), width=1)
+    elif data == 'first_pay_from_add_task':
+        payment_keyboard.row(
             IB(text=payment['buttons']['pay_from_add_task']['first_pay_from_add_task_button'],
                callback_data='back_accept_setting_task'))
     else:
-        first_pay_from_add_task.row(
+        payment_keyboard.row(
             IB(text=payment['buttons']['pay_from_add_task']['first_pay_from_add_task_button'],
                callback_data='back_accept_all_setting'))
+    return payment_keyboard.as_markup()
 
-    return first_pay_from_add_task.as_markup()
+
+def payment_completed_builder() -> IM:
+    keyboard = BD()
+    keyboard.row(
+        IB(text=payment['buttons']['pay_completed_button'],
+           callback_data='close'))
+    return keyboard.as_markup()
+
+
+def back_to_payment() -> IM:
+    keyboard = BD()
+    keyboard.row(
+        IB(text=BACK,
+           callback_data='back_to_pay'))
+    return keyboard.as_markup()
+
+
+def back_to_payment_and_generate() -> IM:
+    keyboard = BD()
+    keyboard.row(
+        IB(text=payment['buttons']['generation_wallet_button'],
+           callback_data='generation_wallet'),
+        IB(text=BACK,
+           callback_data='back_to_pay'), width=1)
+    return keyboard.as_markup()
 
 
 # Клавиатура, при открытии истории заданий, которая показывает список аккаунтов (за образец взята функция list_account_builder)

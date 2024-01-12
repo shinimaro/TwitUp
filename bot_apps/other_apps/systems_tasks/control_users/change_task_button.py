@@ -1,8 +1,8 @@
 from aiogram import Bot
 
 from bot_apps.bot_parts.task_push.task_push_keyboards import close_button
-from config import load_config
 from bot_apps.other_apps.wordbank.wordlist import notifications
+from config import load_config
 from databases.database import Database
 
 config = load_config()

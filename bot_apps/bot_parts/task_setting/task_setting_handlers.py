@@ -3,10 +3,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from bot_apps.bot_parts.main_menu.main_menu_handlers import process_open_main_menu
-from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
-from bot_apps.other_apps.systems_tasks.control_users.initial_priority import determine_initial_priority
 from bot_apps.bot_parts.task_setting.task_setting_guardian import text_except_all_notifications
 from bot_apps.bot_parts.task_setting.task_setting_keyboards import setting_tasks_builder
+from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
+from bot_apps.other_apps.systems_tasks.control_users.initial_priority import determine_initial_priority
 from bot_apps.other_apps.systems_tasks.watchmans.priority_updater import apply_priority, TgId
 from bot_apps.other_apps.wordbank.wordlist import setting
 from databases.database import Database

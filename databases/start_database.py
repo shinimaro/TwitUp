@@ -1,6 +1,4 @@
-import asyncio
 import inspect
-import time
 from asyncio import gather
 from typing import Callable
 
@@ -86,6 +84,15 @@ class StartDB:
                                          'issued_by_STB REAL,'
                                          'payment_date TIMESTAMP WITH TIME ZONE DEFAULT (now()),'
                                          'payment_method VARCHAR(50))')
+
+    async def create_payments_wallets_table(self):
+        async with self.pool.acquire() as connection:
+            if not await connection.fetchval("SELECT to_regclass('payments_wallets')"):
+                await connection.execute('CREATE TABLE payments_wallets('
+                                         'unique_id SERIAL PRIMARY KEY,'
+                                         'telegram_id INT,'
+                                         'wallet_id INT,'
+                                         'valid_until TIMESTAMP WITH TIME ZONE)')
 
     async def create_payments_tasks_table(self):
         async with self.pool.acquire() as connection:
@@ -521,6 +528,14 @@ class StartDB:
                                          'task_delete_fines_id SERIAL PRIMARY KEY,'
                                          'percent_fines INT,'
                                          'date_of_added TIMESTAMP WITH TIME ZONE DEFAULT NOW())')
+
+    async def create_cost_stb_table(self):
+        async with self.pool.acquire() as connection:
+            if not await connection.fetchval("SELECT to_regclass('cost_stb')"):
+                await connection.execute('CREATE TABLE cost_stb('
+                                         'cost_id SERIAL PRIMARY KEY,'
+                                         'cost_to_dollar REAL,'
+                                         'date_of_added TIMESTAMP WITH TIME ZONE DEFAULT NOW());')
 
     async def create_admins_table(self):
         async with self.pool.acquire() as connection:

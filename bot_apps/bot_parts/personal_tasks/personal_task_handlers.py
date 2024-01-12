@@ -3,14 +3,13 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bot_apps.other_apps.FSM.FSM_states import FSMPersonalTask
-from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.bot_parts.adding_task.adding_task_handlers import open_page_settings
 from bot_apps.bot_parts.adding_task.adding_task_text import define_price
 from bot_apps.bot_parts.personal_tasks.personal_task_functions import find_page, get_task_id, check_increase_executions, \
     initial_task_id, update_state, check_balance_sufficiency, get_sum_penalty, get_sum_refund_with_penalty, \
     duplicate_task_settings, find_history_page, inirial_history_task_id, get_histoy_task_id
-from bot_apps.bot_parts.personal_tasks.personal_task_keyboards import personal_tasks_menu_keyboard, active_task_keyboard, \
+from bot_apps.bot_parts.personal_tasks.personal_task_keyboards import personal_tasks_menu_keyboard, \
+    active_task_keyboard, \
     noneactive_task_keyboard, increased_executions_keyboard, add_new_executions_keyboard, \
     warning_before_deletion_keyboard, delete_task_keyboard, del_task_keyboard, editing_duplication_keyboard, \
     active_tasks_menu_keyboard, history_tasks_menu_keyboard, history_task_keyboard, \
@@ -20,6 +19,8 @@ from bot_apps.bot_parts.personal_tasks.personal_task_text import personal_tasks_
     prefix_not_enter_number, prefix_not_correct_number, insufficient_balance_for_executions, task_executions_updated, \
     delete_task_text, define_warning_text_before_deletion, delete_task_notification, delete_task_with_penalty, \
     history_tasks_menu_text, history_task_text, collect_fines_text
+from bot_apps.other_apps.FSM.FSM_states import FSMPersonalTask
+from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.systems_tasks.control_tasks.delete_task import safely_delete_task
 from bot_apps.other_apps.wordbank import personal_task
 from config import load_config

@@ -4,17 +4,11 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from databases.database import Database
+from parsing.elements_storage.elements_dictionary import base_links
 from parsing.main_checkings.base_start_checking import BaseStartChecking, ActionsDict
 from parsing.main_checkings.checking_executions.main_parsing_functions import CheckExecution
-from parsing.elements_storage.elements_dictionary import base_links
 
 db = Database()
-
-# class ActionsArsgs(TypedDict):
-#     subscriptions: Union[tuple[str]]
-#     likes: Optional[tuple[str]]
-#     retweets: Optional[tuple[str]]
-#     comments: Optional[tuple[str]]
 
 
 @dataclass(frozen=True, slots=True)

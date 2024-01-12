@@ -3,9 +3,10 @@ from aiogram.types import InlineKeyboardButton as IB
 from aiogram.types import InlineKeyboardMarkup as IM
 from aiogram.utils.keyboard import InlineKeyboardBuilder as BD
 
-from bot_apps.bot_parts.panels.admin_panel.admin_panel_functions import SortedUsers, get_user_info, get_all_tasks, get_tasks_page, \
+from bot_apps.bot_parts.panels.admin_panel.admin_panel_functions import SortedUsers, get_user_info, get_all_tasks, \
+    get_tasks_page, \
     SortedTasks, get_tasks_sorting_options, get_workers
-from bot_apps.bot_parts.panels.admin_panel.admin_panel_keyboards import pagination, _add_arrow, _get_return_stb_sign
+from bot_apps.bot_parts.panels.admin_panel.admin_panel_keyboards import pagination, add_arrow, get_return_stb_sign
 from bot_apps.other_apps.wordbank import admin_panel, BACK, support_panel
 from databases.database import Database
 from databases.dataclasses_storage import SupportInfo, UsersList, UserAllInfo, SentTasksInfo, UserTasksInfo, \
@@ -53,7 +54,7 @@ async def sup_sorted_users_menu_keboard(state: FSMContext) -> IM:
     data = await state.get_data()
     sorting_options = data['user_sorting_options'] if 'user_sorting_options' in data else None
     sorted_users_menu_kb.row(
-        *[IB(text=text + _add_arrow(button, sorting_options),
+        *[IB(text=text + add_arrow(button, sorting_options),
              callback_data='sup_sorted_users_' + button)
           for button, text in admin_panel['sorted_users_buttons'].items()], width=1)
     sorted_users_menu_kb.row(*_sup_get_list_collor_buttons(sorting_options), width=1)
@@ -271,7 +272,7 @@ async def sup_all_tasks_sorting_keyboard(state: FSMContext) -> IM:
     all_tasks_kb = BD()
     sorting_options: SortedTasks = await get_tasks_sorting_options(state)
     all_tasks_kb.row(
-        *[IB(text=text + _add_arrow(button, sorting_options),
+        *[IB(text=text + add_arrow(button, sorting_options),
              callback_data=f'supus_sort_tasks_{button}')
           for button, text in admin_panel['sorted_tasks_buttons'].items()], width=1)
     all_tasks_kb.row(*_sup_get_list_tasks_buttons(sorting_options), width=1)
@@ -359,7 +360,7 @@ async def sup_reduce_executions_keyboard(state: FSMContext) -> IM:
     """Кнопка под уменьшением кол-ва заданий"""
     reduce_executions_kb = BD()
     reduce_executions_kb.row(
-        IB(text=admin_panel['buttons']['return_stb_button'] + await _get_return_stb_sign(state),
+        IB(text=admin_panel['buttons']['return_stb_button'] + await get_return_stb_sign(state),
            callback_data='support_for_task_reduce_return_stb'))
     reduce_executions_kb.row(_sup_get_back_task_button())
     return reduce_executions_kb.as_markup()

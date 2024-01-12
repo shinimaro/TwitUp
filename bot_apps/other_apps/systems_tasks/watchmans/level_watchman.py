@@ -1,5 +1,7 @@
-from typing import TypedDict, NoReturn
+import asyncio
 from asyncio import sleep
+from typing import TypedDict, NoReturn
+
 from databases.database import Database
 
 db = Database()
@@ -10,13 +12,13 @@ class WorkersDict(TypedDict):
     level: str
 
 
-# Сторож, собирающий всех воркеров, у которых есть уровень какой-то и проверяет, есть ли у них что-то
+# Сторож, собирающий всех воркеров, у которых есть уровень какой-то и проверяет, выполнили ли они тасков на свой уровень
 async def level_watchman() -> None:
     # Собираем всех юзеров, у которых уже прошла неделя после обновления уровня
     workers_dict: dict[int, WorkersDict] = await db.get_users_after_up_level()
     # Отбираем всех воркеров, которые не выполнили заданий на свой уровень
     selected_workers_dict: dict[int, WorkersDict] = await select_workers(workers_dict)
-    # Понижмам в уровне всех, кто не выполнил условия
+    # Понижаем в уровне всех, кто не выполнил условия
     await db.decline_in_level(selected_workers_dict)
     # Обновляем дату проверки и обновления уровня у всех юзеров
     await db.update_time_for_level(list(workers_dict.keys()))
@@ -37,3 +39,10 @@ async def level_watchman_checker() -> NoReturn:
     while True:
         await sleep(20 * 60)
         await level_watchman()
+
+
+async def sus():
+    await db.connect()
+    await level_watchman()
+
+asyncio.get_event_loop().run_until_complete(sus())

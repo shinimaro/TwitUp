@@ -2,6 +2,7 @@ import asyncio
 import time
 
 from pyppeteer.page import Page
+
 from parsing.elements_storage.elements_dictionary import subscribers_blocks, converter
 from parsing.manage_webdrivers.master_function import Master
 from parsing.parsing_functions.find_functions import find_all_users
@@ -39,8 +40,7 @@ class AllOurUsers:
                             self.common_page: Page = self.master.watchman_webdriver['page']  # Обновляем страницу
                             continue
                         users = set()
-                        # while len(users) < 15:
-                        while len(users) < 1:
+                        while len(users) < 15:
                             await asyncio.sleep(1)
                             html = await self.common_page.content()
                             users.update(await find_all_users(html, self.common_page))

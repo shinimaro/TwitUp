@@ -5,7 +5,8 @@ from aiogram.types import InlineKeyboardButton as IB
 from aiogram.types import InlineKeyboardMarkup as IM
 from aiogram.utils.keyboard import InlineKeyboardBuilder as BD
 
-from bot_apps.bot_parts.panels.admin_panel.admin_panel_functions import SortedUsers, get_user_info, get_all_tasks, SortedTasks, \
+from bot_apps.bot_parts.panels.admin_panel.admin_panel_functions import SortedUsers, get_user_info, get_all_tasks, \
+    SortedTasks, \
     get_tasks_sorting_options, get_tasks_page, get_return_flag, get_workers, get_task_price, SettingsTaskPrice, \
     find_out_about_price_changes, get_priority_settings, find_out_about_priority_setting, get_settings_awards_cut, \
     find_out_about_awards_cut_setting
@@ -48,7 +49,7 @@ async def sorted_users_menu_keboard(state: FSMContext) -> IM:
     data = await state.get_data()
     sorting_options = data['user_sorting_options'] if 'user_sorting_options' in data else None
     sorted_users_menu_kb.row(
-        *[IB(text=text + _add_arrow(button, sorting_options),
+        *[IB(text=text + add_arrow(button, sorting_options),
              callback_data='admin_sort_users_' + button)
           for button, text in admin_panel['sorted_users_buttons'].items()], width=1)
     sorted_users_menu_kb.row(*_get_list_collor_buttons(sorting_options), width=1)
@@ -244,7 +245,7 @@ async def all_tasks_sorting_keyboard(state: FSMContext) -> IM:
     all_tasks_kb = BD()
     sorting_options: SortedTasks = await get_tasks_sorting_options(state)
     all_tasks_kb.row(
-        *[IB(text=text + _add_arrow(button, sorting_options),
+        *[IB(text=text + add_arrow(button, sorting_options),
              callback_data=f'admin_sort_tasks_{button}')
           for button, text in admin_panel['sorted_tasks_buttons'].items()], width=1)
     all_tasks_kb.row(*_get_list_tasks_buttons(sorting_options), width=1)
@@ -266,7 +267,7 @@ def _get_back_tasks_button() -> IB:
               callback_data='admin_back_to_all_tasks')
 
 
-def _add_arrow(button: str, sorting_options: SortedUsers | SortedTasks) -> str:
+def add_arrow(button: str, sorting_options: SortedUsers | SortedTasks) -> str:
     """Приставка для сортировки"""
     if sorting_options and button == sorting_options.key:
         return ' ▲' if not sorting_options.reverse else ' ▼'
@@ -325,13 +326,13 @@ async def reduce_executions_keyboard(state: FSMContext) -> IM:
     """Кнопка под уменьшением кол-ва заданий"""
     reduce_executions_kb = BD()
     reduce_executions_kb.row(
-        IB(text=admin_panel['buttons']['return_stb_button'] + await _get_return_stb_sign(state),
+        IB(text=admin_panel['buttons']['return_stb_button'] + await get_return_stb_sign(state),
            callback_data='admin_for_task_reduce_return_stb'))
     reduce_executions_kb.row(_get_back_task_button())
     return reduce_executions_kb.as_markup()
 
 
-async def _get_return_stb_sign(state: FSMContext) -> str:
+async def get_return_stb_sign(state: FSMContext) -> str:
     """Дополнение для кнопки с вовзратом stb юзеру"""
     return_flag = await get_return_flag(state)
     return ' ❌' if not return_flag else ' ✅'

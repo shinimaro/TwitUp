@@ -9,7 +9,6 @@ from bot_apps.bot_parts.adding_task.adding_task_text import define_price, round_
 from databases.database import Database
 from databases.dataclasses_storage import LinkAction, CommentParameter
 
-
 db = Database()
 
 

@@ -44,7 +44,7 @@ async def get_initial_priority(tg_id) -> int:
     # Взять верхний и нижний лимит приоритета
     limits: LimitsDict = await db.get_user_limits(tg_id)
     fines = await db.get_current_fines(tg_id)
-    limits['max_limits'] -= fines
+    limits['max_limits'] -= fines + 10
     # Взять информацию о прошлых показателях
     execution_information: ExecutionInformation = await db.user_executions_info(tg_id)
     return math.ceil(calculate_final_priority(limits, execution_information))
@@ -62,4 +62,4 @@ def calculate_final_priority(limits: LimitsDict, execution_information: Executio
         execution_rate -= 40
     execution = execution / 100 * execution_rate  # Превращаем обратно в итоговое число приоритета
     accepted = accepted / 100 * execution_information['acceptance_rate'] if execution_information['acceptance_rate'] > 0 else accepted
-    return limits['min_limits'] + execution + accepted
+    return max(limits['min_limits'] + execution + accepted, limits['min_limits'])  # Защита от случаев, когда итоговый рейтинг меньше, чем минимальный

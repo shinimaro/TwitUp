@@ -1,7 +1,7 @@
 from aiogram import Bot
 
-from bot_apps.other_apps.filters.limits_filters.message_limit_filter import MessageFilter
 from bot_apps.bot_parts.task_push.task_push_keyboards import proposal_for_review_builder
+from bot_apps.other_apps.filters.limits_filters.message_limit_filter import MessageFilter
 from bot_apps.other_apps.wordbank import notifications
 from config import load_config
 from databases.database import Database

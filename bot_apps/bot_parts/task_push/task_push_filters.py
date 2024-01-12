@@ -1,19 +1,17 @@
+import re
 import string
 
 from aiogram import Router
+
 from bot_apps.bot_parts.task_push.task_push_text import context_task_builder, content_comment_builder
 from bot_apps.other_apps.wordbank import task_completion
 from config import load_config
-import re
-
 from databases.database import Database
 
 router = Router()
 config = load_config()
 
 db = Database()
-
-
 
 
 # Функция для подготовки ссылки комментарии для проверки на корректность

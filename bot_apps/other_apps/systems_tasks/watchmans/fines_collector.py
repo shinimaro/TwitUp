@@ -3,9 +3,9 @@ from typing import NoReturn
 
 from aiogram import Bot
 
-from bot_apps.other_apps.filters.limits_filters.message_limit_filter import MessageFilter
 from bot_apps.bot_parts.adding_task.adding_task_text import round_numbers
 from bot_apps.bot_parts.personal_tasks.personal_task_keyboards import collect_fines_keyboard
+from bot_apps.other_apps.filters.limits_filters.message_limit_filter import MessageFilter
 from bot_apps.other_apps.wordbank import personal_task
 from config import load_config
 from databases.database import Database

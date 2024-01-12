@@ -3,13 +3,10 @@ from asyncio import gather
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from pyppeteer.browser import Browser
-
 from databases.database import Database
 from parsing.elements_storage.elements_dictionary import base_links
 from parsing.main_checkings.base_start_checking import BaseStartChecking
 from parsing.main_checkings.re_checking_executions.main_parsing_functions import ReCheckExecutions
-from parsing.manage_webdrivers.master_function import Master
 
 db = Database()
 
@@ -59,8 +56,6 @@ class StartReChecking(BaseStartChecking):
         link_to_worker_id: int | None = await db.get_link_to_worker_comment(self.tasks_msg_id)
         cut_dict = await db.get_all_cut(self.tasks_msg_id)
 
-        # Точно поставить актион дикт, пост, воркера и всё
-
         self.re_checking_args = ReChecingArgs(
             parsing_args={
                 'subscriptions': (base_link_to_worker, links_on_actions.account_link, f'{base_link_to_worker}/following', f'{links_on_actions.account_link}/followers', cut_dict),
@@ -79,4 +74,5 @@ class StartReChecking(BaseStartChecking):
             self.tasks.extend([self.re_checking_args.functions_dict[action](page, *self.re_checking_args.parsing_args[action])])
 
     def _final_check(self) -> bool:
+        """Итоговая проверка выполнения"""
         return all(list(self.actions_dict.values()))

@@ -1,7 +1,7 @@
-import asyncio
 import datetime
 import re
 from typing import Literal
+
 import asyncpg
 import pytz
 
@@ -11,8 +11,7 @@ from databases.dataclasses_storage import WorkersInfo, ActionsInfo, LinkAction, 
     InfoIncreasedExecutions, RemainingTaskBalance, FinesInfo, AllFinesInfo, AdminPanelMainInfo, UsersList, \
     AuthorTaskInfo, FinesPartInfo, SupportPanelInfo, SupportInfo, AdminInfo, AllInfoLimits, AwardsCut, RealPricesTask, \
     UsersPerformTask, TaskAllInfo, AllTasks, UserPayments, UserFines, UserAccount, FineInfo, UserAllInfo, SentTasksInfo, \
-    UserTasksInfo, InfoForMainMenu, WaitingStartTask
-from parsing.elements_storage.elements_dictionary import base_links
+    UserTasksInfo, InfoForMainMenu, WaitingStartTask, GeneratedWalletInfo, GetWalletIdLock
 
 config = load_config()
 
@@ -101,7 +100,6 @@ class Database:
                     return True
                 return False
 
-    # +
     # Получить все данные для личного кабинета
     async def get_personal_info(self, tg_id):
         async with self.pool.acquire() as connection:
@@ -115,17 +113,13 @@ class Database:
                     dict_info[categories_tasks[i][0]] += 1
                 return dict_info
 
-    # +
     # Показывает все аккаунты пользователя
     async def get_accounts(self, tg_id):
         async with self.pool.acquire() as connection:
-            # Это старый здоровый запрос, отбирающий все задания, фильры которых проходит аккаунт и все дополнительные уже не нужные данные
-            # accounts = await connection.fetch("SELECT accounts.account_name, account_status.level, tb1.counts, accounts.account_status, accounts.account_balance FROM accounts LEFT JOIN (SELECT accounts.account_name, COUNT(b1.type_task) as counts FROM accounts JOIN account_status USING(account_name), (SELECT actions.type_task, tasks.task_id, task_filters.account_level, task_filters.date_of_registration, task_filters.followers, task_filters.subscribers, task_filters.quantity_posts FROM tasks LEFT JOIN task_filters USING(filter_id) LEFT JOIN actions USING(task_id) WHERE tasks.telegram_id <> $1 AND status = 'active') as b1 WHERE accounts.telegram_id = $1 AND (account_status.level >= b1.account_level OR b1.account_level is NULL) AND (AGE(account_status.date_of_registration, b1.date_of_registration) <= INTERVAL '0 days' OR b1.date_of_registration is Null) AND (account_status.followers >= b1.followers OR b1.followers is NULL) AND (account_status.subscribers >= b1.subscribers OR b1.subscribers is NULL) AND ((account_status.posts + account_status.retweets) >= b1.quantity_posts OR b1.quantity_posts is NULL) AND ((b1.task_id, accounts.account_name) NOT IN (SELECT task_id, account_name FROM completed_tasks WHERE telegram_id = $1)) GROUP BY accounts.account_name, account_status.level, accounts.account_status) as tb1 USING(account_name) INNER JOIN account_status USING(account_name) WHERE accounts.deleted = False AND accounts.telegram_id = $1 ORDER BY CASE WHEN accounts.account_status = 'inactive' THEN 1 ELSE 0 END, account_status.level DESC;", tg_id)
             accounts = await connection.fetch("SELECT account_name, account_status, account_balance FROM accounts WHERE accounts.deleted = False AND accounts.telegram_id = $1 ORDER BY CASE WHEN accounts.account_status = 'inactive' THEN 1 ELSE 0 END, account_name", tg_id)
             accounts_dict = {}
             for acc in accounts:
                 accounts_dict[acc['account_name']] = {'count': 0, 'balance': acc['account_balance'] if acc['account_balance'] else 0, 'status': acc['account_status']}
-            # Выдаёт готовый словарь с текстом
             return accounts_dict
 
     # Показывает, добавлял ли пользователь когда-то хотя бы 1 аккаунт
@@ -136,17 +130,6 @@ class Database:
                 return True
             return False
 
-    # # Получить все задания для каждого аккаунта пользователя
-    # async def get_tasks_for_accounts(self, tg_id):
-    #     async with self.pool.acquire() as connection:
-    #         accounts_info = await connection.fetch("SELECT accounts.account_name, b1.type_task FROM accounts JOIN account_status USING(account_name), (SELECT actions.type_task, task_filters.account_level, task_filters.date_of_registration, task_filters.followers, task_filters.subscribers, task_filters.quantity_posts FROM tasks LEFT JOIN task_filters USING(filter_id) LEFT JOIN actions USING(task_id) WHERE telegram_id <> $1 AND status = 'active') as b1 WHERE accounts.telegram_id = $1 AND accounts.deleted = False AND (account_status.level >= b1.account_level OR b1.account_level is NULL) AND (AGE(account_status.date_of_registration, b1.date_of_registration) <= INTERVAL '0 days' OR b1.date_of_registration is Null) AND (account_status.followers >= b1.followers OR b1.followers is NULL) AND (account_status.subscribers >= b1.subscribers OR b1.subscribers is NULL) AND ((account_status.posts + account_status.retweets) >= b1.quantity_posts OR b1.quantity_posts is NULL) AND (b1.task_id NOT IN (SELECT task_id FROM completed_tasks WHERE telegram_id = $1))", tg_id)
-    #         accounts_info_dict = {}
-    #         for account in accounts_info:
-    #             accounts_info_dict.setdefault(account[0], {'subscriptions': 0, 'likes': 0, 'retweets': 0, 'comments': 0})
-    #             accounts_info_dict[account[0]][account[1]] += 1
-    #         return accounts_info_dict
-
-    # +
     # Получить информацию по конкретному аккаунту
     async def get_account_info(self, acc_name, tg_id):
         async with self.pool.acquire() as connection:
@@ -155,7 +138,6 @@ class Database:
             info_dict = {'status': info['account_status'], 'earned': info['balancer'] if info['balancer'] else 0, 'account_balance': info['account_balance'], 'type': {'subscriptions': info['subscriptions'], 'likes': info['likes'], 'retweets': info['retweets'], 'comments': info['comments']}}
             return info_dict
 
-    # +
     # Собрать все монеты с аккаунта
     async def collect_rewards(self, tg_id, acc_name):
         async with self.pool.acquire() as connection:
@@ -199,11 +181,6 @@ class Database:
             if result:
                 return result['telegram_id']
             return False
-
-    # # Отключение всех уведомлений
-    # async def enable_all_off(self, tg_id):
-    #     async with self.pool.acquire() as connection:
-    #         await connection.execute("UPDATE user_notifications SET subscriptions = False, likes = False, retweets = False, comments = False WHERE telegram_id = $1", tg_id)
 
     # Первое включение всех уведомлений
     async def enable_all_on(self, tg_id):
@@ -290,8 +267,8 @@ class Database:
                         await self.change_all_notifications(tg_id, change=True)
                         return True
                     # Преждевременная остановка цикла, если все ключи получены
-                    # if info_dict['deleted_flag'] and info_dict['disabled_flag']:
-                    #     break
+                    if info_dict['deleted_flag'] and info_dict['disabled_flag']:
+                        break
             await self.change_all_notifications(tg_id)
         return info_dict
 
@@ -337,42 +314,6 @@ class Database:
                 await connection.execute("INSERT INTO accounts_limits(account_id, subscriptions, likes, comments, retweets) VALUES ($1, $2, $3, $4, $5)",
                                          account_id, account_limit['subscriptions'], account_limit['likes'], account_limit['comments'], account_limit['retweets'])
                 return account_id
-
-
-
-    # # Функция для добавления нового аккаунта и его соответствующих характеристик
-    # async def add_account(self, tg_id, acc_name, all_info_dict):
-    #     async with self.pool.acquire() as connection:
-    #         date_of_registration = datetime.datetime.strptime(all_info_dict['date_of_registration'], '%Y-%m-%d').date()
-    #         await connection.execute("INSERT INTO accounts(telegram_id, account_name) VALUES($1, $2)", tg_id, acc_name)
-    #         await connection.execute("INSERT INTO account_status(account_name, level, date_of_registration, followers, subscribers, posts, retweets) VALUES ($1, $2, $3, $4, $5, $6, $7)", acc_name, all_info_dict['level'], date_of_registration, all_info_dict['followers'], all_info_dict['subscribers'], all_info_dict['posts'], all_info_dict['retweets'])
-
-    # # Проверка аккаунта на то, есть ли он в базе данных и, в зависимости от этого, обновляем/добавляем данные
-    # async def check_before_adding(self, tg_id, acc_name, all_info_dict):
-    #     async with self.pool.acquire() as connection:
-    #         async with connection.transaction():
-    #             result = await connection.fetch('SELECT telegram_id FROM accounts WHERE account_name = $1', acc_name)
-    #             # Если есть в базе данных в статусе удалённого
-    #             if result:
-    #                 await connection.execute("UPDATE accounts SET deleted = False, account_status = 'active', telegram_id = $1 WHERE account_name = $2", tg_id, acc_name)
-    #             # Если совершенно новый аккаунт
-    #             else:
-    #                 await self.add_account(tg_id, acc_name, all_info_dict)
-
-    # # Проверка на то, можно ли обновлять аккаунт и, если нет, то показывает время, оставшееся до следующего обновления
-    # async def check_to_update(self, acc_name) -> bool | float:
-    #     async with self.pool.acquire() as connection:
-    #         last_update = await connection.fetchrow('SELECT last_update FROM accounts WHERE account_name = $1', acc_name)
-    #         if last_update:
-    #             # Преобразовываем объект datetime из результата запроса в "aware" объект с временной зоной UTC
-    #             last_update = last_update[0].astimezone(pytz.UTC)
-    #             current_time = datetime.datetime.now(pytz.UTC)
-    #             time_difference = current_time - last_update
-    #             hours_difference = time_difference.total_seconds() / 3600
-    #             if hours_difference < 24:
-    #                 return 24 - hours_difference
-    #             return True
-    #         return True
 
     # Получить все настройки
     async def all_setting(self, tg_id):
@@ -441,7 +382,6 @@ class Database:
         async with self.pool.acquire() as connection:
             await connection.execute('UPDATE referral_office SET promocode = $2 WHERE telegram_id = $1', tg_id, promocode)
 
-    # +
     # Функция для вытаскивания данных для партнёрской статистики
     async def affiliate_statistics_info(self, tg_id):
         async with self.pool.acquire() as connection:
@@ -476,7 +416,6 @@ class Database:
                 }
                 return affiliate_statistics_dict
 
-    # +
     # Проверяем, что пользователь может собрать награды (если только часть. то в каком количестве)
     async def check_referral_reward(self, tg_id):
         async with self.pool.acquire() as connection:
@@ -493,7 +432,6 @@ class Database:
                 else:
                     return can_collect['can_collect']
 
-    # +
     # Собираем информацию для реферального кабинета
     async def ref_office_info(self, tg_id):
         async with self.pool.acquire() as connection:
@@ -506,7 +444,6 @@ class Database:
                     ref_office_info_dict[key] = value if value is not None else 0
                 return ref_office_info_dict
 
-    # +
     # Проверка наличия наград
     async def check_referral_rewards(self, tg_id):
         async with self.pool.acquire() as connection:
@@ -515,7 +452,6 @@ class Database:
                 return False
             return True
 
-    # +
     # Обновляем балансы реферального кабинета и баланс пользователя, а также выводит, сколько было взято и какой итоговый баланс
     async def collection_of_referral_rewards(self, tg_id):
         async with self.pool.acquire() as connection:
@@ -539,7 +475,6 @@ class Database:
         async with self.pool.acquire() as connection:
             await connection.execute('INSERT INTO withdraws_referral_office(telegram_id, withdraw_amount) VALUES ($1, $2)', tg_id, amount)
 
-    # +
     # Вытаскиваем данные для статистики аккаунта
     async def statistic_info(self, tg_id):
         async with self.pool.acquire() as connection:
@@ -789,17 +724,12 @@ class Database:
                     await connection.execute('UPDATE failure_statistics SET waiting_link_time = now() WHERE tasks_msg_id = $1', tasks_msg_id)
                 elif status == 'process_comments':
                     await connection.execute('UPDATE failure_statistics SET perform_time_comment = now() WHERE tasks_msg_id = $1', tasks_msg_id)
-                # elif status == 'checking':
-                #     await connection.execute('UPDATE tasks_messages SET status = $2 WHERE tasks_msg_id = $1', tasks_msg_id, status)
 
     # Получить количество выполненных заданий
     async def get_all_completed_and_price(self, task_id):
         async with self.pool.acquire() as connection:
-            # completed = await connection.fetchrow('SELECT executions - (SELECT COUNT(*) FROM completed_tasks WHERE task_id = $1) as count_complete FROM tasks WHERE task_id = $1', task_id)
             price = await connection.fetchrow('SELECT price FROM tasks WHERE task_id = $1', task_id)
             executions = await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = $1', task_id)
-            # completed = round(completed.get('count_complete', 0) / 5) * 5
-            # return {'count_complete': completed, 'price': price['price'] / 100 * (100 - config.task_price.commission_percent)}
             return {'count_complete': round(executions['executions'] / 5) * 5, 'price': self._round_number(price["price"])}
 
     # Получить message_id высланного задания
@@ -859,7 +789,6 @@ class Database:
                 reward = (await connection.fetchrow('SELECT price FROM tasks WHERE task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1)', tasks_msg_id))['price']
                 # Выплата всех штрафов юзера
                 reward = await self.payment_of_fines(reward, tg_id)
-                print('Итоговый ревард ', reward)
                 # Добавление таска в сделанные (completed_tasks)
                 await connection.execute('INSERT INTO completed_tasks(telegram_id, task_id, account_id, tasks_msg_id, final_reward, date_of_completion) SELECT telegram_id, task_id, account_id, $1, $2, finish_time FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE tasks_msg_id = $1;', tasks_msg_id, reward)
                 # Перевод заработанного на баланс аккаунта, с которого было выполнено задание
@@ -899,9 +828,7 @@ class Database:
     # Получить id аккаунта по id сообщении о задании
     async def get_account_id_from_tasks_messages(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
-            return (await connection.fetchrow('SELECT account_id FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id))['account_id']
-
-
+            return await connection.fetchval('SELECT account_id FROM tasks_messages WHERE tasks_msg_id = $1', tasks_msg_id)
 
     # Узнать, есть ли активные таски у юзера
     async def get_count_active_tasks(self, tg_id):
@@ -980,7 +907,6 @@ class Database:
         for key, value in task_info.items():
             if key in actions_list and value:
                 actions_dict[key] = task_info['profile_link'] if key == 'subscriptions' else task_info['post_link']
-
         return ActionsInfo(type_action=actions_dict,
                            comment_paremeters=None)
 
@@ -1098,8 +1024,8 @@ class Database:
     async def check_balance_account(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
             async with connection.transaction():
-                account_balance = (await connection.fetchrow('SELECT account_balance FROM accounts WHERE account_id = (SELECT account_id FROM tasks_messages WHERE tasks_msg_id = $1)', tasks_msg_id))['account_balance']
-                if account_balance is not None and account_balance <= 0:
+                account_balance = await connection.fetchval('SELECT account_balance FROM accounts WHERE account_id = (SELECT account_id FROM tasks_messages WHERE tasks_msg_id = $1)', tasks_msg_id)
+                if not account_balance or account_balance <= 0:
                     return False
                 return True
 
@@ -1164,12 +1090,6 @@ class Database:
                 if i['account_name'].lower() == f'@{account}'.lower():
                     return int(i['tasks_msg_id'])
             return check_tasks[0]  # Если не нашли, возвращаем первый найденный таск
-
-    # Получить всю информацию из задания для функции по проверке комментария
-    async def get_all_task_info(self, tasks_msg_id):  # Хз, куда она
-        async with self.pool.acquire() as connection:
-            task_info = await connection.fetchrow("SELECT tasks_messages.account_id, parameters.* FROM tasks_messages JOIN tasks USING(task_id) JOIN actions USING(task_id) JOIN parameters USING(parameter_id) WHERE tasks_messages.tasks_msg_id = $1 AND actions.type_task = 'comments'", tasks_msg_id)
-            return task_info
 
     # Получить информацию о том, есть ли какие-то ещё задания, которые в процессе выполнения
     async def get_tasks_user(self, tg_id):
@@ -1324,8 +1244,6 @@ class Database:
             fines_id = await connection.fetchval("INSERT INTO fines(telegram_id, fines_type) VALUES($1, 'often_deleted') RETURNING fines_id", tg_id)
             await connection.execute("INSERT INTO often_deleted(fines_id, task_id, number_awards) VALUES ($1, $2, $3)", fines_id, task_id, number_awards)
 
-    # Запись в бд о рефанде средств
-
     # Обновление статуса задания на "воркер забил, либо забыл"
     async def update_status_on_scored(self, tasks_msg_id):
         async with self.pool.acquire() as connection:
@@ -1446,6 +1364,11 @@ class Database:
         async with self.pool.acquire() as connection:
             await connection.execute("UPDATE tasks SET status = 'active' WHERE task_id = $1 AND status <> 'deleted'", task_id)
 
+    # Обновление раунда задания
+    async def update_task_round(self, task_id):
+        async with self.pool.acquire() as connection:
+            await connection.execute('UPDATE tasks SET round = round + 1 WHERE task_id = $1', task_id)
+
     # Смена статуса задания на "дополнительная рассылка"
     async def change_status_task_on_dop_bulk_messaging(self, task_id):
         async with self.pool.acquire() as connection:
@@ -1471,10 +1394,6 @@ class Database:
         async with self.pool.acquire() as connection:
             executions = await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = $1)', tasks_msg_id)
             return executions['executions']
-
-    # async def get_executions_from_task(self, task_id):
-    #     async with self.pool.acquire() as connection:
-    #         return (await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = $1', task_id))['executions']
 
     # Проверка статуса задания и отметка его, как завершённого
     async def completed_task_status(self, tasks_msg_id):
@@ -1630,12 +1549,10 @@ class Database:
             executions = await connection.fetchrow('SELECT executions FROM tasks WHERE task_id = $1', task_id)
             return executions['executions']
 
-    # Достаёт информацию о об отправленных заданиях
-    async def get_sent_tasks(self):
+    # Достаёт информацию об отправленных заданиях
+    async def get_sent_tasks(self, task_id):
         async with self.pool.acquire() as connection:
-            # Я так и не смог взять все записи в нужном мне временном промежутке, как бы не пытался(
-            # result = await connection.fetch("SELECT task_id, offer_time, start_time FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE offer_time >= now() - interval '4 days' AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) ORDER BY offer_time DESC;", task_id)
-            result = await connection.fetch("SELECT task_id, offer_time, start_time FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE offer_time >= now() - interval '4 days'  ORDER BY offer_time DESC;")
+            result = await connection.fetch("SELECT task_id, offer_time, start_time FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE offer_time >= now() - interval '4 days' AND telegram_id <> (SELECT telegram_id FROM tasks WHERE task_id = $1) ORDER BY offer_time DESC;", task_id)
             statistics_dict = {}
             now_time = datetime.datetime.now(pytz.timezone('Europe/Moscow'))
             for info in result:
@@ -1963,7 +1880,9 @@ class Database:
     async def get_need_for_level(self):
         async with self.pool.acquire() as connection:
             need_tasks = await connection.fetchrow('SELECT prelim, main, challenger, champion FROM number_of_completed_tasks')
-            return {level: value for level, value in need_tasks.items()}
+            need_dict = {level: value for level, value in need_tasks.items()}
+            need_dict['vacationers'] = 0
+            return need_dict
 
     # Взять то, сколько нужно именть аккаунтов на уровень
     async def get_need_accounts(self):
@@ -1984,25 +1903,10 @@ class Database:
                 return {'need_level': need_level, 'accounts': accounts['count'], 'completed_tasks': completed_tasks['count']}
             return False
 
-    # Функция для проверки на повышение уровня и сохранения уровня
-    async def up_and_save_level(self, tg_id):
-        async with self.pool.acquire() as connection:
-            user_info_dict = await self.get_info_for_change_level(tg_id)
-            if user_info_dict:  # Если нужный уровень есть в запросе (т.е. юзер не наивысшего уровня и ему есть, куда расти)
-                need_tasks_dict = await self.get_need_for_level()
-                need_accounts_dict = await self.get_need_for_level()
-                # Проверка на то, что хватает выполненных заданий и аккаунтов для нового уровня
-                if user_info_dict['completed_tasks'] >= need_tasks_dict[user_info_dict['need_level']] and \
-                        user_info_dict['accounts'] >= need_accounts_dict[user_info_dict['need_level']]:
-                    # Повышенние уровня
-                    await connection.execute("UPDATE tasks_distribution SET level = $2 WHERE telegram_id = $1", tg_id, user_info_dict['need_level'])
-                    # Обновление даты взятия уровня
-                    await connection.execute('UPDATE tasks_distribution SET date_update_level = now() WHERE telegram_id = $1', tg_id)
-
     # Сбор всех челиксов, у которых прошла неделя с момента апа уровня
     async def get_users_after_up_level(self):
         async with self.pool.acquire() as connection:
-            all_users = await connection.fetch("SELECT telegram_id, level, COUNT(unique_id) as completed_tasks  FROM tasks_distribution RIGHT JOIN completed_tasks USING(telegram_id) WHERE NOW() - date_update_level >= INTERVAL '7 days' AND date_of_completion >= date_of_last_check AND level <> 'vacationers' GROUP BY telegram_id, level")
+            all_users = await connection.fetch("SELECT telegram_id, level, (SELECT COUNT(*) FROM completed_tasks WHERE telegram_id = tasks_distribution.telegram_id AND date_of_completion >= tasks_distribution.date_of_last_check) as completed_tasks FROM tasks_distribution WHERE NOW() - date_update_level >= INTERVAL '7 days' AND level <> 'vacationers';")
             return {user['telegram_id']: {'completed_tasks': user['completed_tasks'], 'level': user['level']} for user in all_users}
 
     # Понижение воркера в уровне
@@ -2017,11 +1921,11 @@ class Database:
                 completed_tasks = workers_dict[worker]['completed_tasks']
                 key = [key for key, level in levels_dict.items() if level == level_worker][0]
                 # Понижение на 1 уровень
-                if completed_tasks >= need_dict[levels_dict[key - 1]] or need_dict[levels_dict[key - 1]] == 'vacationers':
-                    new_level = levels_dict[key - 1]
+                if completed_tasks >= need_dict[levels_dict[key - 1]]:
+                    new_level = levels_dict[max(key - 1, 1)]
                 # Понижение на 2 уровня
                 else:
-                    new_level = levels_dict[key - 2]
+                    new_level = levels_dict[max(key - 2, 1)]
                 await connection.execute('UPDATE tasks_distribution SET level = $2 WHERE telegram_id = $1', worker, new_level)
 
     # Обновление времени чекоров уровня и чекера тасков
@@ -2217,9 +2121,6 @@ class Database:
                 'number_add_tasks': f"AND NOW() - date_of_creation < INTERVAL '{time_condition} days'",
                 'number_active_tasks': f"AND NOW() - date_of_creation < INTERVAL '{time_condition} days'",
                 'number_fines': f"AND NOW() - date_added < INTERVAL '{time_condition} days'"}
-            # Запрос через f строки
-            # all_users = await connection.fetch(f"SELECT telegram_id, telegram_name, date_join, priority, COALESCE(level, 'beginner') as level, COALESCE(number_accounts, 0) as number_accounts, COALESCE(number_completed, 0) as number_completed, COALESCE(number_add_tasks, 0) as number_add_tasks, COALESCE(number_active_tasks, 0) as number_active_tasks, COALESCE(number_fines, 0) as number_fines FROM users LEFT JOIN date_join USING(telegram_id) LEFT JOIN tasks_distribution USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_accounts FROM accounts GROUP BY 1) as tb_accs USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_completed FROM completed_tasks GROUP BY 1) tb_cmp_tsks USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_add_tasks FROM tasks GROUP BY 1) tb_tasks USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_active_tasks FROM tasks WHERE status NOT IN ('completed', 'deleted') GROUP BY 1 ) tb_active_tasks USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_fines FROM fines GROUP BY 1) tb_fines USING(telegram_id) {conditions_dict[condition_list]} {time_conditions_dict[condition_sort] if condition_sort else ''} ORDER BY date_join DESC")
-            # Запрос без f строк
             query = '''SELECT telegram_id, telegram_name, date_join, priority, COALESCE(level, 'beginner') as level, COALESCE(number_accounts, 0) as number_accounts, COALESCE(number_completed, 0) as number_completed, COALESCE(number_add_tasks, 0) as number_add_tasks, COALESCE(number_active_tasks, 0) as number_active_tasks, COALESCE(number_fines, 0) as number_fines FROM users LEFT JOIN date_join USING(telegram_id) LEFT JOIN tasks_distribution USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_accounts FROM accounts GROUP BY 1) as tb_accs USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_completed FROM completed_tasks GROUP BY 1) tb_cmp_tsks USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_add_tasks FROM tasks GROUP BY 1) tb_tasks USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_active_tasks FROM tasks WHERE status NOT IN ('completed', 'deleted') GROUP BY 1 ) tb_active_tasks USING(telegram_id) LEFT JOIN (SELECT telegram_id, COUNT(*) as number_fines FROM fines GROUP BY 1) tb_fines USING(telegram_id) {conditions} {time_conditions} ORDER BY date_join DESC'''
             all_users = await connection.fetch(query.format(conditions=conditions_dict[condition_list], time_conditions=time_conditions_dict[condition_sort] if condition_sort else ''))
 
@@ -2691,8 +2592,6 @@ class Database:
                 return [support['telegram_id'] for support in supports]
             return [(await self.get_default_support_id())]
 
-
-
     # Найти телеграм name сапорта по умолчнанию
     async def get_default_support_name(self):
         async with self.pool.acquire() as connection:
@@ -2756,7 +2655,6 @@ class Database:
     # Меняем очередную стадию проверки задания
     async def change_re_check_stage(self, tasks_msg_id, stage, check_flag=True):
         async with self.pool.acquire() as connection:
-            # Это чат gpt мне показал так сделать, чтобы стадию указать в запросе
             query = f"UPDATE task_completion_check SET stage_{stage} = $1 WHERE tasks_msg_id = $2"
             await connection.execute(query, check_flag, tasks_msg_id)
 
@@ -2797,15 +2695,6 @@ class Database:
             link = await connection.fetchrow("SELECT comment_id FROM task_check_materials WHERE tasks_msg_id = $1", tasks_msg_id)
             if link:
                 return link['comment_id']
-
-
-    # # Получить границу времени, дальше которой уже проверять посты у юзера смысла нет
-    # async def get_last_time_for_re_executions(self, tasks_msg_id):
-    #     async with self.pool.acquire() as connection:
-    #         info = await connection.fetchrow('SELECT finish_time, stage_1, stage_2, stage_3, stage_4 FROM statistics JOIN task_completion_check USING(tasks_msg_id) WHERE tasks_msg_id = $1', tasks_msg_id)
-    #         stages = ['stage_1', 'stage_2', 'stage_3', 'stage_4']
-    #         last_stage = [stage for stage in stages if info[stage] is None][0]
-    #         return info['finish_time'] + datetime.timedelta(hours=info[last_stage] + 1)
 
     # Получить имя аккаунта, сделавшего задание
     async def get_account_from_completed_tasks(self, tasks_msg_id):
@@ -2893,15 +2782,15 @@ class Database:
     # Найти все таски, которым пора переходить на новый раунд
     async def get_tasks_for_new_round(self) -> dict[int, Literal[1, 2, 3]]:
         async with self.pool.acquire() as connection:
-            tasks = await connection.fetch("SELECT task_id, round, executions, NOW() - date_of_creation as time_passed, COUNT(CASE WHEN tasks_messages.status = 'completed' THEN 1 ELSE NULL END) as count_completed, COUNT(CASE WHEN tasks_messages.status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'сhecking') THEN 1 ELSE NULL END) as in_process FROM tasks RIGHT JOIN tasks_messages USING(task_id) WHERE round > 0 AND round < 3 AND tasks.status NOT IN ('completed', 'deleted') GROUP BY task_id, round, executions, time_passed, date_of_creation ORDER BY date_of_creation;")
-            info_dict = {2: {'time_passed': 20, 'max_completion_percentage': 75},
+            tasks = await connection.fetch("SELECT task_id, round, executions, NOW() - date_of_creation as time_passed, (SELECT COUNT(*) FROM tasks_messages WHERE tasks_messages.status = 'completed' AND tasks_messages.task_id = tasks.task_id) as count_completed, (SELECT COUNT(*) FROM tasks_messages WHERE tasks_messages.status IN ('start_task', 'process', 'process_subscriptions', 'process_likes', 'process_retweets', 'waiting_link', 'process_comments', 'сhecking') AND tasks_messages.task_id = tasks.task_id) as in_process FROM tasks WHERE round > 0 AND round < 3 AND tasks.status NOT IN ('completed', 'deleted', 'dop_bulk_messaging') GROUP BY task_id, round, executions, time_passed, date_of_creation ORDER BY date_of_creation;")
+            info_dict = {2: {'time_passed': 20, 'max_completion_percentage': 70},
                          3: {'time_passed': 40, 'max_completion_percentage': 80}}
             tasks_dict = {}
             for task in tasks:
                 next_round = task['round'] + 1  # Взять раунд, для которого будут отбираться воркеры
-                if info_dict[next_round]['time_passed'] >= task['time_passed'].total_seconds() * 60 and \
+                if task['time_passed'].total_seconds() >= info_dict[next_round]['time_passed'] * 60 and \
                         info_dict[next_round]['max_completion_percentage'] > (task['count_completed'] + (task['in_process'] * 0.8)) / (task['executions'] / 100):
-                    tasks_dict[task] = next_round
+                    tasks_dict[task['task_id']] = next_round
             return tasks_dict
 
     # Достать всех юзеров, которые долго ждут задание и которым пора апнуть приоритет
@@ -3047,6 +2936,57 @@ class Database:
             await connection.execute("INSERT INTO support_alert_over_refusal(telegram_id, task_id) VALUES ($1, $2)", support_id, task_id)
 
     # Проверка на то, что задание не удалено
-    async def check_delete_task(self, task_id):
+    async def check_not_delete_task(self, task_id):
         async with self.pool.acquire() as connection:
             return bool(await connection.fetchval("SELECT task_id FROM tasks WHERE status <> 'deleted' AND task_id = $1", task_id))
+
+    # Поставить дефолт аккаунт в сообщение о таске
+    async def account_initialization(self, tasks_msg_id):
+        async with self.pool.acquire() as connection:
+            if not await self.get_account_id_from_tasks_messages(tasks_msg_id):  # Если юзер так и не успел выбрать аккаунт
+                tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
+                await connection.execute("UPDATE tasks_messages SET account_id = (SELECT account_id FROM accounts WHERE telegram_id = $2 ORDER BY account_id LIMIT 1) WHERE tasks_msg_id = $1", tasks_msg_id, tg_id)
+
+    # Сделать запись о пополнении
+    async def record_of_payment(self, tg_id, amount_payment, issued_by_stb, payment_method):
+        async with self.pool.acquire() as connection:
+            await connection.execute("INSERT INTO payments(telegram_id, amount, issued_by_STB) VALUES ($1, $2, $3, $4)",
+                                     tg_id, amount_payment, issued_by_stb, payment_method)
+
+    # Пополнить баланс юзера
+    async def update_user_balance_afrter_payment(self, tg_id, stb: float):
+        async with self.pool.acquire() as connection:
+            await connection.execute("UPDATE users SET balance = $1 WHERE telegram_id = $2", stb, tg_id)
+
+    # Достать инфу о действующем сгенерированном кошельке
+    async def get_info_about_generated_wallet(self, tg_id) -> GeneratedWalletInfo:
+        async with self.pool.acquire() as connection:
+            wallet_info = await connection.fetchrow("SELECT wallet_id, (CASE WHEN valid_until > NOW() THEN valid_until - NOW() ELSE INTERVAL '0 days 0 hours 0 minutes 0 seconds' END) as valid_until FROM payments_wallets WHERE telegram_id = $1 ORDER BY valid_until DESC LIMIT 1", tg_id)
+            return GeneratedWalletInfo(wallet_id=wallet_info['wallet_id'],
+                                       valid_until=wallet_info['valid_until'])
+
+    # Сохранить сгенерированный кошелёк
+    async def save_generated_wallets(self, tg_id, wallet_id: int):
+        async with self.pool.acquire() as connection:
+            await connection.execute("INSERT INTO payments_wallets(telegram_id, wallet_id, valid_until) VALUES ($1, $2, NOW() + '30 minutes')", tg_id, wallet_id)
+
+    # Проверка на то, что у юзера есть действующий сгененрированный кошелёк
+    async def check_generated_wallet(self, tg_id):
+        async with self.pool.acquire() as connection:
+            return bool(await connection.fetchval("SELECT wallet_id FROM payments_wallets WHERE telegram_id = $1 AND valid_until >= NOW()", tg_id))
+
+    # Дать свободный id ключ
+    async def get_free_wallet_id(self):
+        async with self.pool.acquire() as connection:
+            async with GetWalletIdLock.wallet_id_lock:
+                free_wallet_id = await connection.fetchval("SELECT wallet_id FROM payments_wallets WHERE valid_until < NOW() ORDER BY wallet_id LIMIT 1")
+                if not free_wallet_id:  # Если свободного ключа не обнаружилось, проверяем, есть ли они вообще
+                    if await connection.fetchval("SELECT wallet_id FROM payments_wallets"):  # Если есть, генерируем новый id
+                        free_wallet_id = (await connection.fetchval("SELECT wallet_id FROM payments_wallets ORDER BY wallet_id DESC LIMIT 1")) + 1
+                    else:  # Если вообще не было созданных ключей, создаём самый первый
+                        free_wallet_id = 1
+                return free_wallet_id
+
+    async def get_stb_coint_cost(self):
+        async with self.pool.acquire() as connection:
+            return await connection.fetchval("SELECT cost_to_dollar FROM cost_stb ORDER BY date_of_added DESC LIMIT 1")

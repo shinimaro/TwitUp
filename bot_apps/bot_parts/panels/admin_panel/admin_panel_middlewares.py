@@ -1,6 +1,6 @@
+from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-from aiogram.filters import BaseFilter
 
 from bot_apps.bot_parts.panels.admin_panel.admin_panel_functions import get_task_id
 from config import load_config

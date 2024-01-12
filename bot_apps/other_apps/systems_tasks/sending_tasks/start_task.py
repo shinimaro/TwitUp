@@ -18,7 +18,7 @@ async def start_tasks(task_id: int, circular: bool) -> None:
         await sleep(WaitingStartTask.waiting_time)
     async with asyncio.Lock():
         # Проверка на то, что задание не было удалено
-        if await db.check_delete_task(task_id):
+        if await db.check_not_delete_task(task_id):
             await db.change_task_status_on_bulk_messaging(task_id)  # Меняем статус на то, что сейчас идёт процесс отбора воркеров
             if not circular:
                 selection_workers = SelectionWorkers(task_id=task_id, max_increase=50)
@@ -33,11 +33,13 @@ async def start_tasks(task_id: int, circular: bool) -> None:
 async def start_round(task_id: int, number_round: Literal[1, 2, 3]):
     """Функция для старта нового раунда распределения задания"""
     async with asyncio.Lock():
-        await db.change_status_task_on_dop_bulk_messaging(task_id)
-        selection_workers = SelectionWorkers(task_id=task_id, number_round=number_round)
-        selected_workers = await selection_workers.selection_of_workers_for_round()
-        await sending_task(task_id, selected_workers)
-        await db.change_status_task_on_active(task_id)
+        if await db.check_not_delete_task(task_id):
+            await db.change_status_task_on_dop_bulk_messaging(task_id)
+            selection_workers = SelectionWorkers(task_id=task_id, number_round=number_round)
+            selected_workers = await selection_workers.selection_of_workers_for_round()
+            await sending_task(task_id, selected_workers)
+            await db.change_status_task_on_active(task_id)
+            await db.update_task_round(task_id)
 
         # Если нужно сделать новый круг, то обращаемся к фанкшину circular_start_task и он опять делает всё тоже самое
 

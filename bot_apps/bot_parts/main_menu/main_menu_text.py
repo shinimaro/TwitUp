@@ -46,12 +46,8 @@ def _text_abuot_user_fines(account_info: InfoForMainMenu) -> str:
     if account_info.sum_fines_stb:
         return main_text + main_menu['account_statistics']['fines_type']['bought_fines'].format(
             account_info.awards_cut, account_info.sum_fines_stb)
-    elif account_info.sum_fines_priority:
-        return main_text + main_menu['account_statistics']['fines_type']['temporary_fines']
+    # Пока убрал, чтобы эта хрень, т.к. не вижу смысла в уведомлять постоянно юзера об этом мелком штрафе
+    # elif account_info.sum_fines_priority:
+    #     return main_text + main_menu['account_statistics']['fines_type']['temporary_fines']
     else:
         return ''
-
-# Штрафы на аккаунте отдельный сообщение. если они есть, если их нет, то и писать не надо
-# Не забыть добавить новый флаг в бд и придумать, как это сделать с новичками, т.к. у них не помню, какой флаг стоит, либо флаг менять после первого выполнения в проверке на юзера после отправки таска, хз
-
-

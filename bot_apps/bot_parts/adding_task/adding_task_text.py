@@ -1,6 +1,5 @@
 import re
 
-
 from bot_apps.other_apps.wordbank.wordlist import add_task
 from config import load_config
 from databases.database import Database
@@ -75,7 +74,6 @@ async def task_setting_text_builder(setting_actions, accepted):
 
 # Функция, показывающая пользователю под добавлением параметров комментария текст о всём то, что он уже выбрал
 async def text_under_comment_parameters_builder(info):
-    # info =  data['accepted']['comment_parameters']
     main_text = add_task['user_setting_comment']
 
     # Если нет заданных параметров или только словарь с предварительно заданными значениями
@@ -113,7 +111,6 @@ async def text_under_comment_parameters_builder(info):
 
 # Функция под добавление одного из трёх параметров проверки (по словам/тэгам/словам и тегам)
 async def text_under_adding_one_parameter_builder(info):
-    # info = data['accepted']['comment_parameters']
     main_text = add_task['user_add_one_comment_parameter']
     # Если не было задано ни одного параметра
     if not info or info == {'one_value': {}}:

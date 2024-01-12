@@ -1,10 +1,11 @@
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from bot_apps.bot_parts.panels.admin_panel.admin_panel_functions import find_range_value, get_user_info, get_new_balance, \
+from bot_apps.bot_parts.panels.admin_panel.admin_panel_functions import find_range_value, get_user_info, \
+    get_new_balance, \
     get_new_priority, get_all_tasks, get_tasks_page, get_task_info, get_task_distribution, \
     correct_number_for_text_about_delete, get_reduse_executions, get_task_id
-from bot_apps.bot_parts.panels.admin_panel.admin_panel_text import _correct_left
+from bot_apps.bot_parts.panels.admin_panel.admin_panel_text import correct_left
 from bot_apps.bot_parts.panels.support_panel.support_panel_functions import get_task_id_for_accepted
 from bot_apps.other_apps.wordbank import support_panel, admin_panel
 from databases.database import Database
@@ -171,7 +172,7 @@ async def sup_user_fines_text(state: FSMContext, user_fines: list[UserFines], pa
             fine.fines_type,
             fine.date_added,
             fine.contents_fine,
-            _correct_left(fine))
+            correct_left(fine))
     return text
 
 
@@ -198,7 +199,7 @@ async def sup_user_remove_fines_text(state: FSMContext, user_fines: list[UserFin
             fine.fines_type,
             fine.date_added,
             fine.contents_fine,
-            _correct_left(fine))
+            correct_left(fine))
     return text
 
 

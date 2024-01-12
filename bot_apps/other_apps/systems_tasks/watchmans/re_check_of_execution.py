@@ -32,6 +32,7 @@ class ReCheckExecution:
 
     async def start_re_check_of_execution(self) -> None:
         """Строж, находящий задания, выполнение которых необходимо перепроверить"""
+        print('Запуск перепроверок')
         await self._checking_all_authors_tasks()
         await self._checking_executions_tasks()
         # Функция для обновления времени последней перепроверки
@@ -145,13 +146,16 @@ class ReCheckExecution:
                 fines_info.cut,
                 fines_info.remaining_amount) if fines_info.cut_flag else '')
 
+    async def sus(self):
+        await sleep(10)
+
     async def re_check_checker(self) -> NoReturn:
         """Функция, вызывающая перепроверку заданий"""
         standart_sleep = 5 * 60
         while True:
-            task = asyncio.get_event_loop().create_task(self.start_re_check_of_execution())
+            task = asyncio.get_event_loop().create_task(self.sus())
             await sleep(standart_sleep)
-            while task.done():
+            while not task.done():
                 await send_notification_to_admin(
                     notifications_to_admin['have_not_webdriwers'].format(len(self.all_tasks_dict)))
                 await sleep(standart_sleep if not self.check_queue

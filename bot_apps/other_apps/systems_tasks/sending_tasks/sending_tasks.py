@@ -1,17 +1,15 @@
 import asyncio
 from typing import TypedDict
 
-from aiogram import Router, Bot, F
+from aiogram import Router, Bot
 from aiogram.exceptions import TelegramForbiddenError
-from aiogram.types import Message
 
+from bot_apps.bot_parts.task_push.task_push_keyboards import new_task_keyboard_builder
 from bot_apps.other_apps.filters.ban_filters.they_banned import TheyBanned
 from bot_apps.other_apps.filters.limits_filters.message_limit_filter import MessageFilter
-from bot_apps.bot_parts.task_push.task_push_keyboards import new_task_keyboard_builder
 from bot_apps.other_apps.wordbank import task_completion
 from config import load_config
 from databases.database import Database
-
 
 router = Router()
 config = load_config()
@@ -26,18 +24,10 @@ class TaskInfo(TypedDict):
     price: int | float
 
 
-# @router.message(F.text == 'a')
-# async def sus(message: Message):
-#     a = await db.user_executions_info(1338827549)
-#     print(a)
-
-# @router.message(F.text == 'q')
-#     task_id = 24
-#     workers = {message.from_user.id: 2}
 # @router.message(F.text == 'q')
 # async def sending_task(message: Message) -> None:
-    # task_id = 35
-    # workers = {message.from_user.id: 2}
+#     task_id = 48
+#     workers = {message.from_user.id: 2}
 async def sending_task(task_id: int, workers: dict[int, int]) -> None:
     tasks = []
     # Взятие некоторой информации по заданию

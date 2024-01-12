@@ -1,9 +1,10 @@
 import asyncio
 import time
-from typing import TypedDict
-from aiogram.types import Message, CallbackQuery
-from aiogram.filters import BaseFilter
 from asyncio import sleep
+from typing import TypedDict
+
+from aiogram.filters import BaseFilter
+from aiogram.types import Message, CallbackQuery
 
 
 class PersonalMessages(TypedDict):

@@ -99,11 +99,9 @@ async def find_all_comments(html_page: str, all_posts: list, user: str, post: st
                 if post_link == post and len(all_posts) > index:
                     comment = all_posts[index+1]
                     # Проверка на то, что этот коммент (цитата) написана нашим пользователем
-                    # status_comment = comment.find_parent('article', class_=post_blocks['comment_block'])
                     author_comment = comment.find('div', class_=post_blocks['username_author']).text
                     if author_comment == user:
-                        # comment_text: str = comment.find('div', class_=post_blocks['post_text']).text
-                        comment_text = 'It`s cool post'
+                        comment_text: str = comment.find('div', class_=post_blocks['post_text']).text
                         comment_link: str = 'https://twitter.com' + all_posts[index+1].find('a', class_=post_blocks['time_publish']).get('href')
                         return comment_text, comment_link
             return all_posts, None
@@ -142,11 +140,11 @@ async def find_ban_block(html_page: str, page: Page) -> bool:
     """Функция, ищущая блок с сообщением о бане аккаунта"""
     for _ in range(2):
         try:
-            print('Проверка аккаунт на жизнь')
             soup = BeautifulSoup(html_page, 'lxml')
             ban_block = soup.find('div', class_=profile_blocks['ban_block'])
             if ban_block:
                 return True
+            # Он никак не может найти блок с баном аккаунта, поэтому я пока это убрал
             # not_account_block = soup.find('div', class_=profile_blocks['not_account_block'])
             # if not_account_block:
             #     return True

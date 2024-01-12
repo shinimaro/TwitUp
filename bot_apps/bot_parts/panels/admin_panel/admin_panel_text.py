@@ -8,7 +8,8 @@ from bot_apps.bot_parts.panels.admin_panel.admin_panel_functions import find_ran
     get_change_need_tasks, get_change_need_active_accs, get_new_admin, get_remove_admin, get_new_support, \
     get_remove_support, get_new_balance, get_tg_id, get_new_priority, correct_number_for_text_about_delete
 from bot_apps.bot_parts.panels.admin_panel.admin_panel_functions import get_tasks_page
-from bot_apps.bot_parts.personal_tasks.personal_task_text import text_for_task_actions, text_for_task_comment, text_for_user_links, \
+from bot_apps.bot_parts.personal_tasks.personal_task_text import text_for_task_actions, text_for_task_comment, \
+    text_for_user_links, \
     sorted_actions_dict
 from bot_apps.other_apps.wordbank import admin_panel
 from databases.database import Database
@@ -181,11 +182,11 @@ async def user_fines_text(state: FSMContext, user_fines: list[UserFines], page: 
             fine.fines_type,
             fine.date_added,
             fine.contents_fine,
-            _correct_left(fine))
+            correct_left(fine))
     return text
 
 
-def _correct_left(user_fine: UserFines) -> str:
+def correct_left(user_fine: UserFines) -> str:
     """Текст о том, сколько осталось до отрбаотки штрафа"""
     if user_fine.stb_left:
         return f'<b>Осталось отработать:</b> <code>{user_fine.stb_left}</code>'
@@ -217,7 +218,7 @@ async def user_remove_fines_text(state: FSMContext, user_fines: list[UserFines],
             fine.fines_type,
             fine.date_added,
             fine.contents_fine,
-            _correct_left(fine))
+            correct_left(fine))
     return text
 
 

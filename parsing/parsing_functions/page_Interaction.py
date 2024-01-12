@@ -1,4 +1,3 @@
-import asyncio
 from asyncio import sleep
 
 import pyppeteer.errors
@@ -43,8 +42,6 @@ class PageInteraction:
 
     @handle_timeout_error
     async def open_profile(self) -> str:
-        # from pyppeteer.errors import NetworkError
-        # try:
         await self.page.goto(self.link)
         await self.page.waitForSelector(converter(profile_blocks['all_profile_info']))
         return await self.page.content()

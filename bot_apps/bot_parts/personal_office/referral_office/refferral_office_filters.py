@@ -3,7 +3,6 @@ import string
 from bot_apps.other_apps.wordbank import referral_office
 from databases.database import Database
 
-
 db = Database()
 
 

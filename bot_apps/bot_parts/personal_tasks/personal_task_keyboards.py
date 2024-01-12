@@ -67,8 +67,6 @@ def tasks_menu_keyboard(page: int, tasks: dict[int, ActiveTasks | HistoryTasks],
     else:
         active_tasks_menu.row(*_pagination(page, legth_tasks, pagination_word))
         tasks_range: TasksRange = find_range_value(page, legth_tasks)
-        # print(tasks)
-        # print('Ыаыаыаыаыаыа')
         active_tasks_menu.row(
             *[IB(text=_get_task_name_for_button(tasks[task_id].task_number, tasks[task_id].date_of_creation),
                  callback_data=f'open_{pagination_word}_task_{task_id}') for task_id in

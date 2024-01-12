@@ -1,4 +1,3 @@
-import asyncio
 import os
 import pickle
 from dataclasses import dataclass
@@ -36,6 +35,7 @@ async def webdriver():
     pass
 
 class Webdrivers:
+    headless_mode: bool = True
     twitter_accounts: dict[str, TwitterAccount] = {}
     account_generator: Optional[Callable] = None
     current_page: Page = None
@@ -53,7 +53,6 @@ class Webdrivers:
             return Webdrivers.current_driver
         else:
             await Webdrivers.current_driver.close()
-            # await self.webdriver()
 
         # Пример настройки мобильного прокси, которое pypetter сам будет менять
         # proxy_endpoint = "http://username:password@p.webshare.io:80"
@@ -96,7 +95,7 @@ class Webdrivers:
 
     async def _set_current_driver(self):
         proxy_server = self._get_proxy_server()
-        Webdrivers.current_driver = await launch(headless=False, args=[proxy_server])
+        Webdrivers.current_driver = await launch(headless=Webdrivers.headless_mode, args=[proxy_server])
 
     @classmethod
     def _get_proxy_server(cls) -> str:

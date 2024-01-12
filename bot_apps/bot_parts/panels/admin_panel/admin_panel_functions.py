@@ -272,7 +272,6 @@ async def get_all_tasks(state: FSMContext) -> list[AllTasks]:
     else:  # Если админ перешёл из кабинета работы с юзерами
         all_tasks: list[AllTasks] = await db.get_all_tasks()
         return all_tasks
-    await get_tg_id()
 
 
 async def tasks_sorting(callback: CallbackQuery, state: FSMContext, reset: bool = False) -> list[AllTasks]:

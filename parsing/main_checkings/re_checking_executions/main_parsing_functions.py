@@ -1,18 +1,14 @@
-import asyncio
 import math
-import time
 from typing import TypedDict
 
-from pyppeteer.browser import Browser
 from pyppeteer.page import Page
 
 from bot_apps.bot_parts.task_push.task_push_filters import comment_check_itself
-from databases.database import Database
-from parsing.manage_webdrivers.master_function import Master
+from parsing.main_checkings.re_checking_executions.elements_control import SubscuptionsFlag, \
+    collect_info_about_subs_flags, \
+    search_for_user_in_slice
 from parsing.parsing_functions.parsing_functions import checking_account_for_life, get_users_list, \
     parsing_likes_in_posts, parsing_user_list, get_comment_text
-from parsing.main_checkings.re_checking_executions.elements_control import SubscuptionsFlag, collect_info_about_subs_flags, \
-    search_for_user_in_slice
 
 
 class ReActionsDict(TypedDict):

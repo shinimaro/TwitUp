@@ -21,7 +21,6 @@ async def existence_parser(link: str, what_check: Literal['profile', 'post']) ->
     except TimeoutError:
         result = True  # Т.к. это наш косяк, всё равно разрешаем посту пройти
         await _return_broke_driver(driver)
-    print(result)
     return result
 
 

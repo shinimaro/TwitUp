@@ -26,6 +26,31 @@ class SelectionCoefficients:
     min_count_accounts: int
 
 
+# self.main_workers_dict = {
+        #     1: {
+        #         1001: {'priority': 60, 'available_accounts': 15},
+        #         1002: {'priority': 70, 'available_accounts': 15},
+        #         1003: {'priority': 80, 'available_accounts': 15},
+        #         1004: {'priority': 90, 'available_accounts': 15},
+        #         1005: {'priority': 100, 'available_accounts': 15},
+        #         1006: {'priority': 50, 'available_accounts': 15},
+        #         1007: {'priority': 40, 'available_accounts': 15},
+        #         1008: {'priority': 30, 'available_accounts': 15},
+        #         1009: {'priority': 20, 'available_accounts': 15},
+        #         1010: {'priority': 10, 'available_accounts': 15}},
+        #     2: {},
+        #     3: {1011: {'priority': 60, 'available_accounts': 15},
+        #           1012: {'priority': 70, 'available_accounts': 15},
+        #           1013: {'priority': 80, 'available_accounts': 15},
+        #           1014: {'priority': 90, 'available_accounts': 15},
+        #           1015: {'priority': 100, 'available_accounts': 15},
+        #           1016: {'priority': 50, 'available_accounts': 15},
+        #           1017: {'priority': 40, 'available_accounts': 15},
+        #           1018: {'priority': 30, 'available_accounts': 15},
+        #           1019: {'priority': 20, 'available_accounts': 15},
+        #           1020: {'priority': 10, 'available_accounts': 15}}}
+
+
 class SelectionWorkers:
 
     def __init__(self, task_id: int = 0, max_increase: int = 0, number_round: Literal[1, 2, 3] = None, precise_quantity: int = None):
@@ -87,30 +112,6 @@ class SelectionWorkers:
         self.selection_coefficients: SelectionCoefficients = await self._strict_selection_of_workers()
         # Отбираем воркеров по раундам
         self.main_workers_dict: dict[Literal[1, 2, 3], dict[int, WorkersDict]] = await db.get_all_workers_for_round(self.task_id)
-
-        # self.main_workers_dict = {
-        #     1: {
-        #         1001: {'priority': 60, 'available_accounts': 15},
-        #         1002: {'priority': 70, 'available_accounts': 15},
-        #         1003: {'priority': 80, 'available_accounts': 15},
-        #         1004: {'priority': 90, 'available_accounts': 15},
-        #         1005: {'priority': 100, 'available_accounts': 15},
-        #         1006: {'priority': 50, 'available_accounts': 15},
-        #         1007: {'priority': 40, 'available_accounts': 15},
-        #         1008: {'priority': 30, 'available_accounts': 15},
-        #         1009: {'priority': 20, 'available_accounts': 15},
-        #         1010: {'priority': 10, 'available_accounts': 15}},
-        #     2: {},
-        #     3: {1011: {'priority': 60, 'available_accounts': 15},
-        #           1012: {'priority': 70, 'available_accounts': 15},
-        #           1013: {'priority': 80, 'available_accounts': 15},
-        #           1014: {'priority': 90, 'available_accounts': 15},
-        #           1015: {'priority': 100, 'available_accounts': 15},
-        #           1016: {'priority': 50, 'available_accounts': 15},
-        #           1017: {'priority': 40, 'available_accounts': 15},
-        #           1018: {'priority': 30, 'available_accounts': 15},
-        #           1019: {'priority': 20, 'available_accounts': 15},
-        #           1020: {'priority': 10, 'available_accounts': 15}}}
 
         self.workers_dict = copy.deepcopy(self.main_workers_dict)
 
@@ -183,9 +184,8 @@ class SelectionWorkers:
         return result
 
     # Коэфициент принятий за ближайший час
-    @staticmethod
-    async def _calculate_acceptance_rate() -> float:
-        acceptance_info = await db.get_sent_tasks()
+    async def _calculate_acceptance_rate(self) -> float:
+        acceptance_info = await db.get_sent_tasks(self.task_id)
         results, counts = 0, 0
         for day in acceptance_info:
             finally_offers, finally_acceptances = 0, 0

@@ -21,6 +21,7 @@ from bot_apps.other_apps.systems_tasks.sending_tasks.start_task import start_tas
 from bot_apps.other_apps.wordbank import add_task
 from config.config import load_config
 from databases.database import Database
+from parsing.other_parsing.existence_parser import existence_parser
 
 router = Router()
 config = load_config()
@@ -299,7 +300,6 @@ async def change_only_english(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     if 'only_english' not in data['accepted']['comment_parameters'] or not data['accepted']['comment_parameters']['only_english']:
         # Проверка на то, если пользователь добавлял ранее проверку для комментария, нет ли там русских букв
-        # Вывести в отдельную проверку
         if 'one_value' in data['accepted']['comment_parameters'] and data['accepted']['comment_parameters']['one_value'].get('tags/words', None):
             for i in ''.join(data['accepted']['comment_parameters']['one_value']['tags/words']['words'] + data['accepted']['comment_parameters']['one_value']['tags/words']['tags']):
                 if i.lower() in 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя':
@@ -414,8 +414,7 @@ async def add_finally_task(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(add_task['check_new_task'])
         link = data['accepted']['post_link'] if post_flag else data['accepted']['profile_link']
         what_check = 'post' if post_flag else 'profile'
-        # check_link: bool = await existence_parser(link, what_check)
-        check_link = True
+        check_link: bool = await existence_parser(link, what_check)
         # Если существование поста/аккаунта не было подтверждено
         if not check_link:
             text = add_task['not_existing_link'].format('поста' if post_flag else 'профиля',

@@ -1,3 +1,4 @@
+import random
 from asyncio import sleep
 
 from aiogram import Router, Bot, F
@@ -82,9 +83,8 @@ async def input_first_account(message: Message, state: FSMContext):
 @router.callback_query(F.data == 'check_first_task')
 async def process_check_first_task(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    # first_check = func()
     await callback.message.edit_text(accounts['examination'].format(data.get('account')))
-    await sleep(1.5)
+    await sleep(random.uniform(1, 3))
     all_users = await all_our_users.get_all_our_users()
     if not data.get('account') in all_users:
         await callback.message.edit_text(accounts['fail_check'].format(data.get('account')[1:]),
@@ -107,7 +107,7 @@ async def process_check_first_task(callback: CallbackQuery, state: FSMContext):
 async def process_fail_check(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await callback.message.edit_text(accounts['examination'].format(data.get('account')))
-    await sleep(2)
+    await sleep(random.uniform(1, 2))
     all_users = await all_our_users.get_all_our_users()
     # Если аккаунт так и не найден в подписках
     if not data.get('account') in all_users:
@@ -132,7 +132,9 @@ async def back_check_first_task(callback: CallbackQuery):
 @router.callback_query((F.data == 'allow_enabling_tasks') | (F.data == 'back_at_end_training_true'))
 async def enable_all_notifications(callback: CallbackQuery):
     await db.enable_all_on(callback.from_user.id)
-    await callback.message.edit_text(accounts['notifications_enabled'].format(0, 0, 0, 0),
+    limits = await db.get_limits_accounts_executions()
+    await callback.message.edit_text(accounts['notifications_enabled'].format(limits['subscriptions'], limits['likes'],
+                                                                              limits['retweets'], limits['comments']),
                                      reply_markup=completion_of_training_builder())
 
 

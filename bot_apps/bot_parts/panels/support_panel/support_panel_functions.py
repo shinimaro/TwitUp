@@ -13,6 +13,7 @@ db = Database()
 config = load_config()
 bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
 
+
 async def change_active_status(callback: CallbackQuery) -> None:
     """Поменять статус саппорта"""
     flag = False if callback.data == 'support_stopped_working' else True
@@ -65,10 +66,3 @@ async def accept_task(state: FSMContext) -> None:
     await bot.send_message(chat_id=tg_id,
                            text=await issuance_of_reward(tasks_msg_id, accepted_support=True),
                            reply_markup=finally_task_builder(tasks_msg_id))
-    # result_back_stb: int | None = await db.roll_back_fines(tasks_msg_id, tg_id)
-    # if result_back_stb:
-    #     await bot.send_message(chat_id=tg_id,
-    #                            text='',
-    #                            reply_markup='')
-
-

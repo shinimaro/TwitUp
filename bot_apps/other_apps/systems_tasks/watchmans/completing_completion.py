@@ -6,7 +6,7 @@ from asyncio import sleep
 from typing import TypeAlias
 from typing import TypedDict, NoReturn
 
-from bot_apps.other_apps.systems_tasks.sending_tasks.selection_of_workers import WorkersDict, SelectionWorkers
+from bot_apps.other_apps.systems_tasks.sending_tasks.selection_of_workers import WorkersDict
 from bot_apps.other_apps.systems_tasks.sending_tasks.sending_tasks import sending_task
 from databases.database import Database
 

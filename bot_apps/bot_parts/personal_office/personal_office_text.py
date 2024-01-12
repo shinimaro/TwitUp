@@ -8,7 +8,6 @@ db = Database()
 # Функция, показывающая информацию о пользователе при открытии личного кабинета
 # По факту просто берёт готовые данные из функции в базе данных и билдит их в словарь
 async def personal_account_text_builder(tg_id: str | int) -> str:
-    # uncollected_balance = await db.uncollected_balance_check(tg_id)
     dict_info = await db.get_personal_info(tg_id)
     general_text = personal_account['main_text'].format(int(dict_info['balance']) if dict_info['balance'].is_integer() else round(dict_info['balance'], 2),
                                                         '' if not dict_info['uncollected_balance'] else personal_account['dop_text'].format(

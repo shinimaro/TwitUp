@@ -1,13 +1,14 @@
-# Здесь находятся основные ссылки, исполуемые при парсинге
 from typing import TypeVar
 
+
+# Здесь находятся основные ссылки, исполуемые при парсинге
 base_links = {
     # Главная домашняя страница в твиттере
     'home_page': 'https://twitter.com/',
     # Страница, через которую предпочтительнее логиниться
     'login_page': 'https://twitter.com/i/flow/login',
     # Страница для просмотра всех наших пепещиков, но пока аккаунта нужного нет
-    'followers_page': f'https://twitter.com/{""}/followers'
+    'followers_page': f'https://twitter.com/{"elonmusk"}/followers'
 }
 
 

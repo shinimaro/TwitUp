@@ -45,12 +45,10 @@ class CheckExecution:
             await db.save_worker_cut(tasks_msg_id, *self._get_cut_users(subs_list, author_username))
             self._set_result_subscriptions(True)
         else:
-            print('Аккаунт воркера ', self.worker_username)
             subs_author: list[str] | bool = await parsing_user_subscriptions(page, self.worker_username, link_to_author)
             if subs_author:
                 await db.save_author_cut(tasks_msg_id, *self._get_cut_users(subs_author))
                 self._set_result_subscriptions(True)
-                print('Аккаунт был найден и срез сохранён')
             else:
                 self._set_result_subscriptions(False)
 

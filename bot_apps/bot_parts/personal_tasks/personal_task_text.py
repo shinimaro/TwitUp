@@ -3,8 +3,8 @@ import datetime
 from aiogram.types import CallbackQuery
 
 from bot_apps.bot_parts.adding_task.adding_task_text import final_text_builder, define_price, round_numbers
-from bot_apps.bot_parts.personal_tasks.personal_task_functions import format_date, get_min_price, find_range_value, get_sum_penalty, \
-    get_remaining_taks_balance_with_penalty
+from bot_apps.bot_parts.personal_tasks.personal_task_functions import format_date, get_min_price, find_range_value, \
+    get_sum_penalty
 from bot_apps.other_apps.wordbank import personal_task
 from databases.database import Database
 from databases.dataclasses_storage import CommentParameter, ActiveTasks, HistoryTasks, ActiveTask, \
@@ -291,7 +291,6 @@ def text_for_user_links(type_action: ActionsInfo.type_action) -> str:
     """Билдер с указанными ссылками пользователя"""
     text = ''
     for link in type_action.values():  # Предпологается, что дикт отсортирован
-        link = 'example/status/' if link is None else link
         if '/status/' not in link:
             text += f'<b>1.</b> Ссылка на профиль {link}\n'
         else:

@@ -8,7 +8,6 @@ from pyppeteer.page import Page
 from config import load_config
 from parsing.elements_storage.elements_dictionary import login_blocks, converter, base_links
 
-
 config = load_config()
 
 

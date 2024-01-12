@@ -1,4 +1,5 @@
-import asyncio
+import math
+import math
 import random
 from asyncio import sleep
 
@@ -9,13 +10,15 @@ from aiogram.types import Message, CallbackQuery
 
 from bot_apps.bot_parts.adding_task.adding_task_text import round_numbers
 from bot_apps.bot_parts.main_menu.main_menu_functions import delete_old_interface
+from bot_apps.bot_parts.personal_office.payment_checker import PaymentData
+from bot_apps.bot_parts.personal_office.payments import CryptoPay
 from bot_apps.bot_parts.personal_office.personal_office_filters import correct_account
 from bot_apps.bot_parts.personal_office.personal_office_keyboards import personal_account_builder, list_account_builder, \
     keyboard_under_account_builder, account_delete_builder, back_button_builder, add_account_builder, \
     not_add_account_builder, account_added_successfully_builder, payment_keyboard_builder, \
     button_back_personal_office_builder, history_keyboard_builder, history_account_keyboard_builder, \
-    list_tasks_keyboards, pay_from_add_task_builder, shadow_ban_builder, back_to_account_kb, insert_new_account_name, \
-    not_rename_account_builder, back_to_account_afret_rename
+    list_tasks_keyboards, shadow_ban_builder, back_to_account_kb, insert_new_account_name, \
+    not_rename_account_builder, back_to_account_afret_rename, back_to_payment, back_to_payment_and_generate
 from bot_apps.bot_parts.personal_office.personal_office_text import personal_account_text_builder, \
     accounts_text_builder, \
     history_account_builder, tasks_list_text_builder
@@ -24,6 +27,7 @@ from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.wordbank import accounts, rules, statistic, payment, history_task
 from config import load_config
 from databases.database import Database
+from databases.dataclasses_storage import GeneratedWalletInfo
 from parsing.other_parsing.parsing_our_subscribers import AllOurUsers
 from parsing.other_parsing.parsing_shadowban import parsing_shadowban
 
@@ -31,6 +35,7 @@ config = load_config()
 router = Router()
 bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
 db = Database()
+crypto_pay = CryptoPay()
 all_our_users = AllOurUsers()
 router.callback_query.filter(IsBanned())
 router.message.filter(IsBanned())
@@ -126,7 +131,6 @@ async def process_rename_account(callback: CallbackQuery, state: FSMContext):
 # Пользователь ввёл новое имя аккаунта
 @router.message(StateFilter(FSMAccounts.rename_account))
 async def process_insert_new_account_name(message: Message, state: FSMContext):
-    # account_name = (await state.get_data())['rename_account']
     await message.delete()
     new_account_name = message.text.replace('https://twitter.com/', '').lower()
     is_correct = await correct_account(message.from_user.id, new_account_name)
@@ -265,11 +269,9 @@ async def process_check_account(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await callback.message.edit_text(accounts['examination'].format(data.get('account')))
     await sleep(random.uniform(1, 3))
-    # all_users = await all_our_users.get_all_our_users()
+    all_users = await all_our_users.get_all_our_users()
     # Если не удалось найти аккаунт в подписках нашего твиттер аккаунта
-    # if data.get('account') not in all_users:
-    result = True
-    if not result:
+    if data.get('account') not in all_users:
         await callback.message.edit_text(accounts['fail_check'].format(data.get('account')[1:]),
                                          reply_markup=not_add_account_builder(),
                                          disable_web_page_preview=True)
@@ -310,7 +312,6 @@ async def try_again_check_account(callback: CallbackQuery, state: FSMContext):
             else accounts['final_fail'].format(data.get('account')[1:])),
             reply_markup=not_add_account_builder(int(callback.data[-1]) + 1),
             disable_web_page_preview=True)
-
     # Аккаунт найден в подписках
     else:
         await process_check_account(callback, state)
@@ -420,21 +421,13 @@ async def open_history_list_page(callback: CallbackQuery, state: FSMContext):
 
 
 # Пользователь пополняет свой баланс из личного кабинета
-@router.callback_query((F.data == 'pay') | (F.data == 'pay_from_add_task'))
-async def process_start_pay(callback: CallbackQuery):
-    # Записать функцию, которая будет выдавать курс доллара и по-прошествию дня, добавлять новый курс
-    # dollar = func()
-    # stb = config.stb_curs
-    dollar, stb = 100, 50
-    # Если пользователь ни разу не пополнял аккаунт (не придумали ещё с Максимом)
-    # Пока разницы нет, но в будущем она будет
-    if callback.data == 'pay_from_add_task' or not await db.check_payment(callback.from_user.id):
-        text = payment['main_text'].format(dollar, stb)
-        reply_markup = payment_keyboard_builder() if callback.data == 'pay' else pay_from_add_task_builder()
-    else:
-        text = payment['main_text'].format(dollar, stb)
-        reply_markup = payment_keyboard_builder()
-
+@router.callback_query((F.data == 'pay') | (F.data == 'first_pay_from_add_task') | (F.data == 'pay_from_add_task'))
+async def process_start_pay(callback: CallbackQuery, state: FSMContext):
+    # dollar = crypto_pay.Rates()
+    dollar = 99.17
+    stb = dollar * 1
+    text = payment['main_text'].format(dollar, stb)
+    reply_markup = await payment_keyboard_builder(callback.from_user.id, callback.data)
     # Проверка на то, что пользователь переходит из уведомления о завершении задания (в этом случае необходимо менять основной интерфейс)
     if await db.get_main_interface(callback.from_user.id) != callback.message.message_id:
         message_id = await callback.message.answer(text=text, reply_markup=reply_markup)
@@ -442,28 +435,44 @@ async def process_start_pay(callback: CallbackQuery):
         await delete_old_interface(message_id, callback.from_user.id, bot, callback.message.message_id)
     else:
         await callback.message.edit_text(text=text, reply_markup=reply_markup)
+    PaymentData.payment_data = callback.data
+    await state.set_state(FSMAccounts.payment_state)
 
 
-# Пользователь делает первое пополнение из добавления задания
-@router.callback_query(F.data == 'first_pay_from_add_task')
-async def first_pay_from_add_task(callback: CallbackQuery):
-    # Записать функцию, которая будет выдавать курс доллара и по-прошествию дня, добавлять новый курс
-    # dollar = func()
-    # stb = config.stb_curs
-    dollar, stb = 100, 50
-    # Пользователь ни разу не пополнял аккаунт (не придумали ещё с Максимом)
-    await callback.message.edit_text(payment['main_text'].format(dollar, stb),
-                                     reply_markup=pay_from_add_task_builder(first_pay=True))
+# Возврат обратно к пополнению
+@router.callback_query(F.data == 'back_to_pay')
+async def process_back_to_pay(callback: CallbackQuery, state: FSMContext):
+    dollar = 99.17
+    cost_stb: float = await db.get_stb_coint_cost()
+    stb = dollar * cost_stb
+    reply_markup = await payment_keyboard_builder(callback.from_user.id, PaymentData.payment_data)
+    await callback.message.edit_text(text=payment['main_text'].format(dollar, stb), reply_markup=reply_markup)
+    await state.set_state(FSMAccounts.payment_state)
 
 
-# Пользователь делает новое пополнение из добавления аккаунта
-@router.callback_query(F.data == 'pay_from_add_task')
-async def pay_pay_from_add_task(callback: CallbackQuery):
-    # Записать функцию, которая будет выдавать курс доллара и по-прошествию дня, добавлять новый курс
-    # dollar = func()
-    # stb = config.stb_curs
-    dollar, stb = 100, 50
-    # Пользователь ни разу не пополнял аккаунт (не придумали ещё с Максимом)
-    await callback.message.edit_text(payment['main_text'].format(dollar, stb),
-                                     reply_markup=pay_from_add_task_builder())
+# Пользователь генерирует кошелёк
+@router.callback_query(F.data == 'generation_wallet')
+async def process_generation_wallet(callback: CallbackQuery, state: FSMContext):
+    wallet_id = await db.get_free_wallet_id()
+    await db.save_generated_wallets(callback.from_user.id, wallet_id)
+    await open_wallet_generated_info(callback, state)
 
+
+# Открыть информацию о сгенерированном кошельке
+@router.callback_query(F.data == 'go_to_generation_wallet')
+async def open_wallet_generated_info(callback: CallbackQuery, state: FSMContext):
+    wallet_info: GeneratedWalletInfo = await db.get_info_about_generated_wallet(callback.from_user.id)
+    wallet_bep20 = crypto_pay.GetWallet(wallet_info.wallet_id)
+    wallet_trc20 = '-'
+    valid_until = math.floor(wallet_info.valid_until.total_seconds() / 60)
+    await callback.message.edit_text(payment['new_wallget'].format(wallet_bep20, wallet_trc20, valid_until),
+                                     reply_markup=back_to_payment())
+    # Проверка на то, что юзер остался до конца работы кошелька и, если он остался, говорим ему о том, что кош больше не доступен
+    await sleep(wallet_info.valid_until.total_seconds())
+    await state.set_state(FSMAccounts.generation_wallet)
+    state: str = await state.get_state()
+    state_string = str(FSMAccounts.generation_wallet)
+    state_string = state_string[state_string.find("'")+1:state_string.rfind("'")].replace('.', ':')
+    if state == state_string:
+        await callback.message.edit_text(payment['replenishment_completed'],
+                                         reply_markup=back_to_payment_and_generate())

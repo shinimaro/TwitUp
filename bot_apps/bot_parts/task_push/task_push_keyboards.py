@@ -1,6 +1,7 @@
 from aiogram.types import InlineKeyboardButton as IB
-from aiogram.utils.keyboard import InlineKeyboardBuilder as BD
 from aiogram.types import InlineKeyboardMarkup as IM
+from aiogram.utils.keyboard import InlineKeyboardBuilder as BD
+
 from bot_apps.bot_parts.help_center.help_center_functions import SupportName
 from bot_apps.other_apps.wordbank import BACK_MAIN_MENU, BACK, FORWARD, notifications
 from bot_apps.other_apps.wordbank import task_completion

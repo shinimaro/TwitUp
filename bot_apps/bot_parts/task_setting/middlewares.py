@@ -1,11 +1,11 @@
 import re
 
 from aiogram.filters import BaseFilter
+from aiogram.types import Message
 
 from bot_apps.bot_parts.task_push.task_push_text import context_task_builder
 from bot_apps.other_apps.wordbank import task_completion
 from databases.database import Database
-from aiogram.types import Message
 
 db = Database()
 

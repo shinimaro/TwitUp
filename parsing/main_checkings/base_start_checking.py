@@ -7,8 +7,8 @@ from pyppeteer.page import Page
 from databases.database import Database
 from databases.dataclasses_storage import LinkAction
 from parsing.main_checkings.checking_executions.main_parsing_functions import ActionsDict
-from parsing.manage_webdrivers.master_function import Master
 from parsing.main_checkings.re_checking_executions.main_parsing_functions import ReActionsDict
+from parsing.manage_webdrivers.master_function import Master
 
 db = Database()
 

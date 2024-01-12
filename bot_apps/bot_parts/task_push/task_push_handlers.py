@@ -4,25 +4,25 @@ from aiogram import Router, Bot, F
 from aiogram.filters import StateFilter
 from aiogram.types import CallbackQuery, Message
 
+from bot_apps.bot_parts.task_push.task_push_filters import comment_check_itself
+from bot_apps.bot_parts.task_push.task_push_keyboards import revealing_task_builder, accounts_for_task_builder, \
+    ok_button_builder, \
+    complete_task_builder, finally_task_builder, get_link_comment_builder, comment_check_builder, task_again_builder, \
+    new_account_from_task_keyboard_builder, not_again_task_builder, not_parsing_builder
+from bot_apps.bot_parts.task_push.task_push_text import full_text_task_builder, context_task_builder, \
+    please_give_me_link, \
+    control_statistic_builder, new_account_from_task_builder, issuance_of_reward
 from bot_apps.bot_parts.task_setting.middlewares import CommentCheck
 from bot_apps.other_apps.FSM.FSM_states import FSMAddTask, FSMAdmin, FSMAccounts
 from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.systems_tasks.control_tasks.check_over_refusal import check_over_refusal
 from bot_apps.other_apps.systems_tasks.control_tasks.delete_tasks_messages import function_distributor_task_messages
 from bot_apps.other_apps.systems_tasks.control_users.change_task_button import change_task_buttons
-
 from bot_apps.other_apps.systems_tasks.control_users.send_letter_of_happiness import availability_check
-from bot_apps.bot_parts.task_push.task_push_filters import comment_check_filter, comment_check_itself
-from bot_apps.bot_parts.task_push.task_push_keyboards import revealing_task_builder, accounts_for_task_builder, ok_button_builder, \
-    complete_task_builder, finally_task_builder, get_link_comment_builder, comment_check_builder, task_again_builder, \
-    new_account_from_task_keyboard_builder, not_again_task_builder, not_parsing_builder
-from bot_apps.bot_parts.task_push.task_push_text import full_text_task_builder, context_task_builder, \
-    please_give_me_link, \
-    control_statistic_builder, new_account_from_task_builder, issuance_of_reward
 from bot_apps.other_apps.wordbank import task_completion
 from config import load_config
 from databases.database import Database
-from parsing.main_checkings.checking_executions.main_parsing_functions import ActionsDict, FoundComment
+from parsing.main_checkings.checking_executions.main_parsing_functions import ActionsDict
 from parsing.main_checkings.checking_executions.start_checking import StartChecking
 from parsing.parsing_functions.parsing_functions import parsing_comment_text
 
@@ -171,8 +171,7 @@ async def process_refuse_task(callback: CallbackQuery):
     await callback.message.edit_text(task_completion['checking_your_performance'])
     account = await db.get_task_account(tasks_msg_id)
     check_execution = StartChecking(tasks_msg_id)
-    # result: ActionsDict | None = await check_execution.start_checking()
-    result: ActionsDict | None = {'likes': True, 'subscriptions': True}
+    result: ActionsDict | None = await check_execution.start_checking()
     # Если так получилось, что проверка так и не удалась
     if result is None:
         await callback.message.edit_text(task_completion['not_check_task'], reply_markup=await not_parsing_builder(tasks_msg_id))

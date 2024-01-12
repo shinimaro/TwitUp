@@ -1,8 +1,8 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 
-from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.bot_parts.help_center.help_center_keyboards import help_center_kb_builder, back_to_help_center_builder
+from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.wordbank.wordlist import help_center
 
 router = Router()

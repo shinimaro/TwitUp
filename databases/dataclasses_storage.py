@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 import datetime
 from enum import Enum
@@ -431,6 +432,16 @@ class InfoForMainMenu:
     sum_fines_priority: int
 
 
+@dataclass(frozen=True, slots=True)
+class GeneratedWalletInfo:
+    wallet_id: int
+    valid_until: datetime.timedelta
+
+
+@dataclass()
+class GetWalletIdLock:
+    wallet_id_lock = asyncio.Lock()
+
 @dataclass
 class WaitingStartTask:
-    waiting_time: int = 10  # Используется в начальном ожидании при старте таска, а также в бд для проверки того, можно ли засчитывать данное задание за удалённое
+    waiting_time: int = 60  # Используется в начальном ожидании при старте таска, а также в бд для проверки того, можно ли засчитывать данное задание за удалённое

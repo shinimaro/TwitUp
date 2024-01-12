@@ -10,7 +10,6 @@ from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.filters.ban_filters.they_banned import TheyBanned
 from bot_apps.other_apps.filters.limits_filters.callback_limit_filter import CallbackFilter
 from bot_apps.other_apps.filters.limits_filters.message_limit_filter import MessageFilter
-from bot_apps.other_apps.wordbank.wordlist import main_menu
 from config import load_config
 from databases.database import Database
 

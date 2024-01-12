@@ -4,6 +4,7 @@ from typing import NoReturn
 from aiogram import Dispatcher, Bot
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
+from aiogram import methods
 
 from bot_apps.bot_parts.adding_task import adding_task_handlers
 from bot_apps.bot_parts.help_center import help_center_handlers
@@ -16,6 +17,9 @@ from bot_apps.bot_parts.personal_office.referral_office import referral_office_h
 from bot_apps.bot_parts.personal_tasks import personal_task_handlers
 from bot_apps.bot_parts.task_push import task_push_handlers
 from bot_apps.bot_parts.task_setting import task_setting_handlers
+from bot_apps.other_apps.errors import errors_handlers
+from bot_apps.other_apps.systems_tasks.watchmans.completing_completion import completing_completion_checker
+from bot_apps.other_apps.systems_tasks.watchmans.re_check_of_execution import ReCheckExecution
 from bot_apps.other_apps.systems_tasks.watchmans.task_setting_reminder import function_distributor_reminders
 from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.filters.ban_filters.they_banned import TheyBanned
@@ -33,12 +37,13 @@ from databases.start_database import StartDB
 from parsing.manage_webdrivers.master_function import Master
 
 start_db = StartDB()
+re_checking = ReCheckExecution()
 
 
 async def main():
     await start_db.start_database()   # Запуск базы данных
     await _fill_ban_lists()           # Загрузка бан списков
-    # await _start_webdrivers()       # Запуск всех вебдрайверов
+    await _start_webdrivers()       # Запуск всех вебдрайверов
     await asyncio.gather(
         _activate_all_watchman(),   # Запуск сторожей
         _start_bot())               # Запуск бота
@@ -46,13 +51,15 @@ async def main():
 
 async def _start_bot() -> NoReturn:
     storage = MemoryStorage()
+    # from aiogram.fsm.storage.redis import RedisStorage, Redis
+    # redis = Redis(host='localhost', db=0)
+    # storage = RedisStorage(redis=redis)
     config = load_config()
     bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
     dp = Dispatcher(storage=storage)
     print('Бот работает')
-
     dp.include_router(main_menu_handlers.router)  # Поставлен фильтр на сообщения
-    dp.include_router(sending_tasks.router)  # Убрать потом
+    # dp.include_router(sending_tasks.router)  # Убрать
     dp.include_router(task_push_handlers.router)
     dp.include_router(personal_task_handlers.router)
     dp.include_router(admin_panel_handlers.router)
@@ -64,9 +71,10 @@ async def _start_bot() -> NoReturn:
     dp.include_router(referral_office_handlers.router)
     dp.include_router(personal_office_handlers.router)
     dp.include_router(other_handlers.router)
-    # dp.include_router(errors_handlers.router)
+    dp.include_router(errors_handlers.router)
     await bot.delete_webhook(drop_pending_updates=True)
     dp.startup.register(bot_menu_builder)
+    # await methods.set_webhook.SetWebhook(url=, ip_address=)  # Вставить сюда url для регистрации вебхука
     await dp.start_polling(bot)
 
 
@@ -95,8 +103,8 @@ async def _activate_all_watchman():
         check_fines_collector(),           # Сборщик штрафов
         launch_new_rounds_checker(),       # Сборщик тасков, которым надо начать новый раунд
         priority_updater_checker(),        # Накидывает приоритета за простой юзера
-        # re_check_checker(),                # Перепроверка выполнений
-        # completing_completion_checker(),   # Проверка отстающийх по выполнению тасков и их добивка
+        re_checking.re_check_checker(),    # Перепроверка выполнений
+        completing_completion_checker(),   # Проверка отстающийх по выполнению тасков и их добивка
     ]
     running_tasks = [asyncio.create_task(task) for task in tasks]  # Запускаем каждую задачу в фоне
     await asyncio.gather(*running_tasks)

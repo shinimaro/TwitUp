@@ -64,7 +64,7 @@ async def open_support_panel(message: Message, state: FSMContext):
 
 
 # Вернуться в панель саппорта
-@router.callback_query(F.data == 'back_to_support_panel')
+@router.callback_query(F.data == 'back_to_support_panel', SupportMidelware())
 async def process_back_support_panel(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FSMSupport.neutral_state)
     await callback.message.edit_text(await main_menu_text(callback.from_user.id),
@@ -72,7 +72,7 @@ async def process_back_support_panel(callback: CallbackQuery, state: FSMContext)
 
 
 # Уйти на отдых саппорту | стать активным
-@router.callback_query((F.data == "support_stopped_working") | (F.data == 'support_start_work'))
+@router.callback_query((F.data == "support_stopped_working") | (F.data == 'support_start_work'), SupportMidelware())
 async def process_change_active_status(callback: CallbackQuery, state: FSMContext):
     await change_active_status(callback)
     await callback.answer(change_status_text(callback))
@@ -80,7 +80,7 @@ async def process_change_active_status(callback: CallbackQuery, state: FSMContex
 
 
 # Стать саппортом по умолчанию | Перестать быть саппортом по умолчанию
-@router.callback_query((F.data == 'support_defaulted_support') | (F.data == 'support_lifted_defaulted_support'))
+@router.callback_query((F.data == 'support_defaulted_support') | (F.data == 'support_lifted_defaulted_support'), SupportMidelware())
 async def process_change_default_support(callback: CallbackQuery, state: FSMContext):
     await change_default_support(callback)
     change_default_support_text(callback)
@@ -96,7 +96,7 @@ async def all_list_users(callback: CallbackQuery, state: FSMContext, page: int =
 
 
 # Саппорт зашёл в меню работы с юзерами
-@router.callback_query(F.data == 'support_open_users_work')
+@router.callback_query(F.data == 'support_open_users_work', SupportMidelware())
 async def process_open_all_users(callback: CallbackQuery, state: FSMContext):
     await save_users_list(state)
     await state.set_state(FSMSupport.input_user)
@@ -104,7 +104,7 @@ async def process_open_all_users(callback: CallbackQuery, state: FSMContext):
 
 
 # Сбросить сортировку
-@router.callback_query(F.data == 'support_reset_sorting_users_list')
+@router.callback_query(F.data == 'support_reset_sorting_users_list', SupportMidelware())
 async def process_sorting_user(callback: CallbackQuery, state: FSMContext):
     await apply_sorting(callback, state, reset=True)
     await callback.answer(support_panel['sorting_reset'])
@@ -112,7 +112,7 @@ async def process_sorting_user(callback: CallbackQuery, state: FSMContext):
 
 
 # Вернуться в список юзеров
-@router.callback_query(F.data == 'support_back_to_users_work')
+@router.callback_query(F.data == 'support_back_to_users_work', SupportMidelware())
 async def back_to_user_work(callback: CallbackQuery, state: FSMContext):
     page = await find_users_page(callback, state)
     await state.set_state(FSMSupport.input_user)
@@ -120,14 +120,14 @@ async def back_to_user_work(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть другую страницу с юзерами
-@router.callback_query((F.data.startswith('support_work_page_')) | (F.data == 'support_back_to_users_work_pages'))
+@router.callback_query((F.data.startswith('support_work_page_')) | (F.data == 'support_back_to_users_work_pages'), SupportMidelware())
 async def open_users_work_page(callback: CallbackQuery, state: FSMContext):
     page = await sup_initial_users_page(callback, state)
     await all_list_users(callback, state, page)
 
 
 # Саппорт зашёл в сортировку
-@router.callback_query(F.data == 'support_sorting_users_list')
+@router.callback_query(F.data == 'support_sorting_users_list', SupportMidelware())
 async def process_sorted_users(callback: CallbackQuery, state: FSMContext):
     await get_user_sorting_options(state)
     await callback.message.edit_text(support_panel['soretd_text'],
@@ -135,7 +135,7 @@ async def process_sorted_users(callback: CallbackQuery, state: FSMContext):
 
 
 # Отсортировать список юзеров
-@router.callback_query(F.data.startswith('sup_sorted_users_'))
+@router.callback_query(F.data.startswith('sup_sorted_users_'), SupportMidelware())
 async def process_apply_sorting_users_list(callback: CallbackQuery, state: FSMContext):
     await apply_sorting(callback, state)
     await callback.answer(admin_panel['new_sorting'])
@@ -143,7 +143,7 @@ async def process_apply_sorting_users_list(callback: CallbackQuery, state: FSMCo
 
 
 # Открыть забаненных или других юзеров
-@router.callback_query(F.data.startswith('supus_open_users_list_'))
+@router.callback_query(F.data.startswith('supus_open_users_list_'), SupportMidelware())
 async def process_open_users_list_(callback: CallbackQuery, state: FSMContext):
     await open_another_users_list(callback, state)
     await callback.answer(admin_panel['new_list_users'])
@@ -151,7 +151,7 @@ async def process_open_users_list_(callback: CallbackQuery, state: FSMContext):
 
 
 # Отсечь по времени других юзеров
-@router.callback_query(F.data.startswith('supus_sorted_users_for_'))
+@router.callback_query(F.data.startswith('supus_sorted_users_for_'), SupportMidelware())
 async def sorted_users_for_time(callback: CallbackQuery, state: FSMContext):
     await sorted_users_list_for_time(callback, state)
     await callback.answer(admin_panel['new_sorting'])
@@ -159,7 +159,7 @@ async def sorted_users_for_time(callback: CallbackQuery, state: FSMContext):
 
 
 # Открытие информации о юзере
-@router.message(StateFilter(FSMSupport.input_user), UserInDatabase())
+@router.message(StateFilter(FSMSupport.input_user), UserInDatabase(), SupportMidelware())
 async def open_all_info_about_user(message: Message, state: FSMContext, tg_id: int):
     await message.delete()
     await state.update_data(tg_id=tg_id)
@@ -172,7 +172,7 @@ async def open_all_info_about_user(message: Message, state: FSMContext, tg_id: i
 
 
 # Вернутся к какому-то пользователю
-@router.callback_query(F.data == 'support_back_to_user_info')
+@router.callback_query(F.data == 'support_back_to_user_info', SupportMidelware())
 async def back_open_all_info_about_user(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(text=await all_user_info_text(state),
                                      reply_markup=await sup_all_info_user_keyboard(state))
@@ -189,7 +189,7 @@ async def open_all_user_info_after_message(obj: Message | CallbackQuery, state: 
 
 
 # Изменение баланса юзера
-@router.callback_query(F.data == 'support_for_user_change_balance')
+@router.callback_query(F.data == 'support_for_user_change_balance', SupportMidelware())
 async def user_change_balance(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(text=await sup_get_user_text_dict('change_balance', state),
                                      reply_markup=sup_back_user_button())
@@ -197,7 +197,7 @@ async def user_change_balance(callback: CallbackQuery, state: FSMContext):
 
 
 # Ввод нового баланса
-@router.message(StateFilter(FSMSupport.input_user_balance))
+@router.message(StateFilter(FSMSupport.input_user_balance), SupportMidelware())
 async def process_input_user_balance(message: Message, state: FSMContext):
     await message.delete()
     await state.update_data(new_balance=int(message.text))
@@ -208,7 +208,7 @@ async def process_input_user_balance(message: Message, state: FSMContext):
 
 
 # Подтверждение ввода баланса
-@router.callback_query(F.data == 'support_coinfirm_change_user_balance')
+@router.callback_query(F.data == 'support_coinfirm_change_user_balance', SupportMidelware())
 async def coinfirm_change_user_balance(callback: CallbackQuery, state: FSMContext):
     await change_user_balance(state)
     await callback.answer(admin_panel['user_balance_changes'])
@@ -216,7 +216,7 @@ async def coinfirm_change_user_balance(callback: CallbackQuery, state: FSMContex
 
 
 # Изменения приоритета пользвателя
-@router.callback_query(F.data == 'support_for_user_change_priority')
+@router.callback_query(F.data == 'support_for_user_change_priority', SupportMidelware())
 async def user_change_priority(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(text=await sup_get_user_text_dict('change_priority', state),
                                      reply_markup=sup_back_user_button())
@@ -224,7 +224,7 @@ async def user_change_priority(callback: CallbackQuery, state: FSMContext):
 
 
 # Ввод нового приоритета юзера
-@router.message(StateFilter(FSMSupport.input_user_priority))
+@router.message(StateFilter(FSMSupport.input_user_priority), SupportMidelware())
 async def process_input_user_priority(message: Message, state: FSMContext):
     await message.delete()
     await state.update_data(new_priority=int(message.text))
@@ -235,7 +235,7 @@ async def process_input_user_priority(message: Message, state: FSMContext):
 
 
 # Подтверждение изменения приоритета
-@router.callback_query(F.data == 'support_coinfirm_user_priority')
+@router.callback_query(F.data == 'support_coinfirm_user_priority', SupportMidelware())
 async def coinifrm_change_priority(callback: CallbackQuery, state: FSMContext):
     await change_user_priority(state)
     await callback.answer(admin_panel['user_priority_changes'])
@@ -243,28 +243,28 @@ async def coinifrm_change_priority(callback: CallbackQuery, state: FSMContext):
 
 
 # Изменение уровня пользователя
-@router.callback_query(F.data == 'support_for_user_change_level')
+@router.callback_query(F.data == 'support_for_user_change_level', SupportMidelware())
 async def change_user_level(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await sup_get_user_text_dict('change_level', state),
                                      reply_markup=sup_change_user_level_keyboard())
 
 
 # Ввод нового уровня для пользователя
-@router.callback_query(F.data.startswith('supus_for_user_change_level_'))
+@router.callback_query(F.data.startswith('supus_for_user_change_level_'), SupportMidelware())
 async def process_change_user_level(callback: CallbackQuery, state: FSMContext):
     await db.change_user_level(await get_tg_id(state), callback.data[28:])
     await open_all_user_info_after_message(callback, state)
 
 
 # Добавить штраф для юзера
-@router.callback_query(F.data == 'support_for_user_adding_fines')
+@router.callback_query(F.data == 'support_for_user_adding_fines', SupportMidelware())
 async def adding_new_fines_user(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await sup_get_user_text_dict('adding_fines', state),
                                      reply_markup=sup_adding_fines_user_keyboard())
 
 
 # Выбор штрафа на приоритет
-@router.callback_query(F.data == 'support_for_user_adding_fines_priority')
+@router.callback_query(F.data == 'support_for_user_adding_fines_priority', SupportMidelware())
 async def process_ading_fines_prioryty(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await sup_priority_fines_text(state),
                                      reply_markup=sup_back_user_button())
@@ -272,7 +272,7 @@ async def process_ading_fines_prioryty(callback: CallbackQuery, state: FSMContex
 
 
 # Указание понижение приоритета юзера
-@router.message(StateFilter(FSMSupport.input_fines_priority))
+@router.message(StateFilter(FSMSupport.input_fines_priority), SupportMidelware())
 async def process_adding_fines_on_priority(message: Message, state: FSMContext):
     await message.delete()
     await add_priority_fines(state, message.text)
@@ -280,7 +280,7 @@ async def process_adding_fines_on_priority(message: Message, state: FSMContext):
 
 
 # Выбор штрафа на сбор STB
-@router.callback_query(F.data == 'support_for_user_adding_fines_stb')
+@router.callback_query(F.data == 'support_for_user_adding_fines_stb', SupportMidelware())
 async def process_adding_fines_on_stb(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await sup_stb_fines_text(state),
                                      reply_markup=sup_back_user_button())
@@ -288,7 +288,7 @@ async def process_adding_fines_on_stb(callback: CallbackQuery, state: FSMContext
 
 
 # Указать сколько будем взимать с юзера
-@router.message(StateFilter(FSMSupport.input_fines_stb))
+@router.message(StateFilter(FSMSupport.input_fines_stb), SupportMidelware())
 async def process_adding_fines_on_stb(message: Message, state: FSMContext):
     await message.delete()
     await add_stb_fines(state, message.text)
@@ -296,7 +296,7 @@ async def process_adding_fines_on_stb(message: Message, state: FSMContext):
 
 
 # Отправить сообщение от имени бота
-@router.callback_query(F.data == 'support_for_user_message_from_bot')
+@router.callback_query(F.data == 'support_for_user_message_from_bot', SupportMidelware())
 async def new_message_to_user(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await sup_message_from_bot_text(state),
                                      reply_markup=sup_back_user_button())
@@ -304,7 +304,7 @@ async def new_message_to_user(callback: CallbackQuery, state: FSMContext):
 
 
 # Указать сообщение для юзера
-@router.message(StateFilter(FSMSupport.input_message_from_bot))
+@router.message(StateFilter(FSMSupport.input_message_from_bot), SupportMidelware())
 async def process_new_message_user(message: Message, state: FSMContext):
     await message.delete()
     await bot.edit_message_text(chat_id=message.chat.id,
@@ -316,14 +316,14 @@ async def process_new_message_user(message: Message, state: FSMContext):
 
 
 # Подтверждение указанного сообщения
-@router.callback_query(F.data == 'support_for_user_confirm_message')
+@router.callback_query(F.data == 'support_for_user_confirm_message', SupportMidelware())
 async def process_message_answer(callback: CallbackQuery, state: FSMContext):
     await send_message_to_user_from_bot(state)
     await open_all_user_info_after_message(callback, state)
 
 
 # Забанить юзера
-@router.callback_query(F.data == 'support_ban_user')
+@router.callback_query(F.data == 'support_ban_user', SupportMidelware())
 async def process_ban_user(callback: CallbackQuery, state):
     await is_banned.adding_blocked_users(await get_tg_id(state), 'support_ban')
     await callback.answer(admin_panel['ban_user'])
@@ -331,7 +331,7 @@ async def process_ban_user(callback: CallbackQuery, state):
 
 
 # Разбанить юзера
-@router.callback_query(F.data == 'support_unban_user')
+@router.callback_query(F.data == 'support_unban_user', SupportMidelware())
 async def process_unban_user(callback: CallbackQuery, state):
     await is_banned.del_blocked_users(await get_tg_id(state))
     await callback.answer(admin_panel['unban_user'])
@@ -339,7 +339,7 @@ async def process_unban_user(callback: CallbackQuery, state):
 
 
 # Показать историю отправленных заданий юзеру
-@router.callback_query((F.data == 'support_for_user_tasks_sent_history') | (F.data == 'support_back_to_tasks_sent_history'))
+@router.callback_query((F.data == 'support_for_user_tasks_sent_history') | (F.data == 'support_back_to_tasks_sent_history'), SupportMidelware())
 async def process_open_sent_tasks(callback: CallbackQuery, state: FSMContext):
     tasks_info: list[SentTasksInfo] = await db.get_info_about_sent_tasks(callback.from_user.id)
     await state.update_data(tasks_info=tasks_info)
@@ -347,14 +347,14 @@ async def process_open_sent_tasks(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть другую страницу с заданиями
-@router.callback_query(F.data.startswith('supus_sent_tasks_user_page_'))
+@router.callback_query(F.data.startswith('supus_sent_tasks_user_page_'), SupportMidelware())
 async def process_open_page_sent_tasks_user(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data[27:])
     await open_sent_tasks_to_user(callback, state, page)
 
 
 # Ввод задания, которое нужно засчитать
-@router.callback_query(F.data == 'support_accept_execution')
+@router.callback_query(F.data == 'support_accept_execution', SupportMidelware())
 async def support_accept_execution(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(support_panel['input_task_id_for_accept'],
                                      reply_markup=back_to_tasks_user_list())
@@ -362,7 +362,7 @@ async def support_accept_execution(callback: CallbackQuery, state: FSMContext):
 
 
 # Сапорт вводить задание для засчитывания
-@router.message(StateFilter(FSMSupport.input_task_id_for_accept), TaskIsNotCompleted())
+@router.message(StateFilter(FSMSupport.input_task_id_for_accept), TaskIsNotCompleted(), SupportMidelware())
 async def support_input_task_id_for_accept(message: Message, state: FSMContext):
     await message.delete()
     await state.update_data(task_for_accept=int(message.text))
@@ -373,7 +373,7 @@ async def support_input_task_id_for_accept(message: Message, state: FSMContext):
 
 
 # Подтверждение засчитывания этого таска
-@router.callback_query(F.data == 'support_accept_task_id_for_accept')
+@router.callback_query(F.data == 'support_accept_task_id_for_accept', SupportMidelware())
 async def support_accept_task_id_for_accept(callback: CallbackQuery, state: FSMContext):
     await accept_task(state)
     await callback.answer(support_panel['task_accepted'])
@@ -391,7 +391,7 @@ async def open_sent_tasks_to_user(callback: CallbackQuery, state: FSMContext, pa
 
 
 # Открыть личные задания юзера
-@router.callback_query(F.data == 'support_for_user_task_personal_history')
+@router.callback_query(F.data == 'support_for_user_task_personal_history', SupportMidelware())
 async def process_open_user_tasks(callback: CallbackQuery, state: FSMContext):
     user_tasks: list[UserTasksInfo] = await db.get_info_abuot_user_tasks(callback.from_user.id)
     await callback.message.edit_text(await sup_user_tasks_text(state, user_tasks),
@@ -401,7 +401,7 @@ async def process_open_user_tasks(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть страницу с личными заданиями юзера
-@router.callback_query(F.data.startswith('supus_user_tasks_page_'))
+@router.callback_query(F.data.startswith('supus_user_tasks_page_'), SupportMidelware())
 async def process_open_page_user_tasks(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data[22:])
     user_tasks: list[UserTasksInfo] = await get_users_task(state)
@@ -410,7 +410,7 @@ async def process_open_page_user_tasks(callback: CallbackQuery, state: FSMContex
 
 
 # Открыть все аккаунты юзера
-@router.callback_query(F.data == 'support_for_user_all_accounts')
+@router.callback_query(F.data == 'support_for_user_all_accounts', SupportMidelware())
 async def open_user_accounts(callback: CallbackQuery, state: FSMContext):
     user_accounts: list[UserAccount] = await db.get_all_user_accounts(callback.from_user.id)
     await state.update_data(user_accounts=user_accounts)
@@ -420,7 +420,7 @@ async def open_user_accounts(callback: CallbackQuery, state: FSMContext):
 
 # Открыть другую страницу со всеми аккаунтами
 @router.callback_query((F.data == 'supus_for_user_active_accounts') | (F.data == 'supus_for_user_inactive_accounts') |
-                       (F.data == 'supus_for_user_deleted_accounts'))
+                       (F.data == 'supus_for_user_deleted_accounts'), SupportMidelware())
 async def process_sorted_user_accounts(callback: CallbackQuery, state: FSMContext):
     user_accounts: list[UserAccount] = await sorted_user_accounts(callback)
     await state.update_data(user_accounts=user_accounts)
@@ -429,7 +429,7 @@ async def process_sorted_user_accounts(callback: CallbackQuery, state: FSMContex
 
 
 # Перейти на другую страницу в аккаунтах
-@router.callback_query(F.data.startswith('supus_user_accounts_page_'))
+@router.callback_query(F.data.startswith('supus_user_accounts_page_'), SupportMidelware())
 async def process_open_user_accounts_page(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data[25:])
     await open_list_user_accounts(callback, state, page)
@@ -444,7 +444,7 @@ async def open_list_user_accounts(callback: CallbackQuery, state: FSMContext, pa
 
 
 # Открыть список штрафов
-@router.callback_query(F.data == 'support_for_user_fines_history')
+@router.callback_query(F.data == 'support_for_user_fines_history', SupportMidelware())
 async def open_all_user_fines(callback: CallbackQuery, state: FSMContext):
     user_fines: list[UserFines] = await db.get_all_fines_user(callback.from_user.id)
     await state.update_data(user_fines=user_fines)
@@ -452,14 +452,14 @@ async def open_all_user_fines(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть другую страницу штрафов
-@router.callback_query(F.data.startswith("supus_user_fines_page_"))
+@router.callback_query(F.data.startswith("supus_user_fines_page_"), SupportMidelware())
 async def open_user_fine_page(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data[22:])
     await open_user_fines_list(callback, state, page)
 
 
 # Открыть только активные штрафы
-@router.callback_query(F.data == 'support_for_user_active_fines')
+@router.callback_query(F.data == 'support_for_user_active_fines', SupportMidelware())
 async def open_active_fines_user(callback: CallbackQuery, state: FSMContext):
     user_fines: list[UserFines] = await db.get_only_active_fines_user(callback.from_user.id)
     await callback.answer(admin_panel['new_sorting'])
@@ -475,7 +475,7 @@ async def open_user_fines_list(callback: CallbackQuery, state: FSMContext, page:
 
 
 # Открыть пополнения юзера
-@router.callback_query(F.data == 'support_for_user_payment_history')
+@router.callback_query(F.data == 'support_for_user_payment_history', SupportMidelware())
 async def open_all_user_payments(callback: CallbackQuery, state: FSMContext):
     user_payments: list[UserPayments] = await db.get_all_payments_user(callback.from_user.id)
     await callback.message.edit_text(await sup_user_payments_text(state, user_payments),
@@ -484,7 +484,7 @@ async def open_all_user_payments(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть другую страницу с пополнениями юзера
-@router.callback_query(F.data.startswith('supus_user_payments_page_'))
+@router.callback_query(F.data.startswith('supus_user_payments_page_'), SupportMidelware())
 async def open_all_user_payments_page(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data[25:])
     user_payments: list[UserPayments] = await get_user_paymnets(state)
@@ -493,7 +493,7 @@ async def open_all_user_payments_page(callback: CallbackQuery, state: FSMContext
 
 
 # Открыть меню для удаления каких-то штрафов юзера
-@router.callback_query(F.data == 'support_for_user_remove_fines')
+@router.callback_query(F.data == 'support_for_user_remove_fines', SupportMidelware())
 async def process_remove_user_fines(callback: CallbackQuery, state: FSMContext):
     user_fines: list[UserFines] = await db.get_only_active_fines_user(callback.from_user.id)
     await state.update_data(user_fines=user_fines)
@@ -502,14 +502,14 @@ async def process_remove_user_fines(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть другую страницу со штрафами для удаления
-@router.callback_query(F.data.startswith('supus_user_remove_fines_page_'))
+@router.callback_query(F.data.startswith('supus_user_remove_fines_page_'), SupportMidelware())
 async def open_remove_user_fines_page(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data[29:])
     await open_user_remove_fines_list(callback, state, page)
 
 
 # Удалить какой-то штраф
-@router.message(StateFilter(FSMSupport.input_fines_id))
+@router.message(StateFilter(FSMSupport.input_fines_id), SupportMidelware())
 async def remove_user_fines(message: Message, state: FSMContext):
     await message.delete()
     await del_fines_id(message)
@@ -526,7 +526,7 @@ async def open_user_remove_fines_list(obj: CallbackQuery | Message, state: FSMCo
 
 
 # Расскрыть все задания пользователей
-@router.callback_query(F.data == 'support_open_tasks_work')
+@router.callback_query(F.data == 'support_open_tasks_work', SupportMidelware())
 async def open_all_tasks(callback: CallbackQuery, state: FSMContext):
     await save_all_tasks(state)
     await set_initial_options(state)
@@ -535,14 +535,14 @@ async def open_all_tasks(callback: CallbackQuery, state: FSMContext):
 
 
 # Вернуться ко всем заданиям юзеров
-@router.callback_query(F.data == 'support_back_to_all_tasks')
+@router.callback_query(F.data == 'support_back_to_all_tasks', SupportMidelware())
 async def process_back_to_all_tasks(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FSMSupport.input_task_id)
     await open_tasks_list(callback, state)
 
 
 # Обновить информацию
-@router.callback_query(F.data == 'support_update_info_all_tasks')
+@router.callback_query(F.data == 'support_update_info_all_tasks', SupportMidelware())
 async def process_update_all_tasks(callback: CallbackQuery, state: FSMContext):
     await callback.answer(admin_panel['update_data'])
     await save_all_tasks(state)
@@ -551,7 +551,7 @@ async def process_update_all_tasks(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть другую страницу со всеми заданиями
-@router.callback_query(F.data.startswith('supus_all_tasks_page_'))
+@router.callback_query(F.data.startswith('supus_all_tasks_page_'), SupportMidelware())
 async def open_all_tasks_page(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data[21:])
     await state.update_data(tasks_list_page=page)
@@ -559,7 +559,7 @@ async def open_all_tasks_page(callback: CallbackQuery, state: FSMContext):
 
 
 # Сбросить сортировку
-@router.callback_query(F.data == 'support_reset_sorting_all_tasks')
+@router.callback_query(F.data == 'support_reset_sorting_all_tasks', SupportMidelware())
 async def reset_sortins_all_tasks(callback: CallbackQuery, state: FSMContext):
     await tasks_sorting(callback, state, reset=True)
     await callback.answer(admin_panel['reset_sorting'])
@@ -567,14 +567,14 @@ async def reset_sortins_all_tasks(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть сортировку
-@router.callback_query(F.data == 'support_sorting_all_tasks')
+@router.callback_query(F.data == 'support_sorting_all_tasks', SupportMidelware())
 async def process_sorting_all_tasks(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(admin_panel['soretd_text'],
                                      reply_markup=await sup_all_tasks_sorting_keyboard(state))
 
 
 # Отсортировать по какому-то значению
-@router.callback_query(F.data.startswith('supus_sort_tasks_'))
+@router.callback_query(F.data.startswith('supus_sort_tasks_'), SupportMidelware())
 async def sort_all_tasks(callback: CallbackQuery, state: FSMContext):
     await tasks_sorting(callback, state)
     await callback.answer(admin_panel['new_sorting'])
@@ -582,14 +582,14 @@ async def sort_all_tasks(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть список каких-то тасков (активных, завершённых)
-@router.callback_query(F.data.startswith('supus_open_tasks_list_'))
+@router.callback_query(F.data.startswith('supus_open_tasks_list_'), SupportMidelware())
 async def process_open_other_tasks_list(callback: CallbackQuery, state: FSMContext):
     await open_other_tasks_list(state, callback.data[22:])
     await open_tasks_list(callback, state)
 
 
 # Отсортировать таски по времени
-@router.callback_query(F.data.startswith("supus_sorted_tasks_for_"))
+@router.callback_query(F.data.startswith("supus_sorted_tasks_for_"), SupportMidelware())
 async def sort_task_for_time(callback: CallbackQuery, state: FSMContext):
     await save_sort_time_task(callback, state)
     await sorted_task_by_time(state)
@@ -603,7 +603,7 @@ async def open_tasks_list(callback: CallbackQuery, state: FSMContext):
 
 
 # Открыть какое-то задание
-@router.message(StateFilter(FSMSupport.input_task_id), TaskInDatabase())
+@router.message(StateFilter(FSMSupport.input_task_id), TaskInDatabase(), SupportMidelware())
 async def process_open_all_task_info(message: Message, state: FSMContext):
     await message.delete()
     await state.update_data(task_id=int(message.text))
@@ -618,20 +618,20 @@ async def update_tasks_info(callback: CallbackQuery, state: FSMContext):
 
 
 # Вернуться к выбранному заданию
-@router.callback_query(F.data == 'support_back_to_task')
+@router.callback_query(F.data == 'support_back_to_task', SupportMidelware())
 async def process_back_to_task(callback: CallbackQuery, state: FSMContext):
     await open_all_task_info(callback, state)
 
 
 # Обновить какое-то задание
-@router.callback_query(F.data == 'support_task_update_info')
+@router.callback_query(F.data == 'support_task_update_info', SupportMidelware())
 async def process_update_task_info(callback: CallbackQuery, state: FSMContext):
     await save_task_all_info(state)
     await open_all_task_info(callback, state)
 
 
 # Отобрать ещё воркеров к какому-то заданию
-@router.callback_query((F.data == 'supus_for_task_dop_task_distribution'), TaskIsActive())
+@router.callback_query((F.data == 'supus_for_task_dop_task_distribution'), TaskIsActive(), SupportMidelware())
 async def dop_task_distribution(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await sup_dop_task_distribution_text(state),
                                      reply_markup=sup_button_to_task_keyboard())
@@ -639,7 +639,7 @@ async def dop_task_distribution(callback: CallbackQuery, state: FSMContext):
 
 
 # Распределение задания
-@router.message(StateFilter(FSMSupport.input_dop_distribution))
+@router.message(StateFilter(FSMSupport.input_dop_distribution), SupportMidelware())
 async def process_task_distribution(message: Message, state: FSMContext):
     await message.delete()
     await state.update_data(task_distribution=int(message.text))
@@ -650,7 +650,7 @@ async def process_task_distribution(message: Message, state: FSMContext):
 
 
 # Подтвердить дополнительное распределние задания
-@router.callback_query(F.data == 'support_confirm_task_distribution', TaskIsActive())
+@router.callback_query(F.data == 'support_confirm_task_distribution', TaskIsActive(), SupportMidelware())
 async def process_confirm_task_distribution(callback: CallbackQuery, state: FSMContext):
     notification = await task_distribution(state)
     await callback.answer(notification, show_alert=True)
@@ -658,14 +658,14 @@ async def process_confirm_task_distribution(callback: CallbackQuery, state: FSMC
 
 
 # Безопасно удалить задание
-@router.callback_query(F.data == 'supus_for_task_safely_delete', TaskIsActive())
+@router.callback_query(F.data == 'supus_for_task_safely_delete', TaskIsActive(), SupportMidelware())
 async def proces_task_safely_delete(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await sup_safely_delete_task_text(state),
                                      reply_markup=sup_safely_delete_keyboard())
 
 
 # Подтвердить безопасное удаление задания
-@router.callback_query(F.data == 'support_confirm_task_safely_delete', TaskIsActive())
+@router.callback_query(F.data == 'support_confirm_task_safely_delete', TaskIsActive(), SupportMidelware())
 async def process_task_safely_delete(callback: CallbackQuery, state: FSMContext):
     await callback.answer(await confirm_safely_delete_text(state), show_alert=True)
     await task_safely_delete(state)
@@ -673,14 +673,14 @@ async def process_task_safely_delete(callback: CallbackQuery, state: FSMContext)
 
 
 # Удалить задание принудительно
-@router.callback_query(F.data == 'supus_for_task_force_delete', TaskIsActive())
+@router.callback_query(F.data == 'supus_for_task_force_delete', TaskIsActive(), SupportMidelware())
 async def process_task_force_delete(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await task_force_delete_text(state),
                                      reply_markup=sup_force_delete_keyboard())
 
 
 # Подтверждение принудительного удаления
-@router.callback_query(F.data == 'support_confirm_task_force_delete', TaskIsActive())
+@router.callback_query(F.data == 'support_confirm_task_force_delete', TaskIsActive(), SupportMidelware())
 async def process_task_force_delete(callback: CallbackQuery, state: FSMContext):
     await callback.answer(await confirm_force_delete_text(state), show_alert=True)
     await task_force_delete(state)
@@ -688,7 +688,7 @@ async def process_task_force_delete(callback: CallbackQuery, state: FSMContext):
 
 
 # Добавить выполнений к заданию
-@router.callback_query(F.data == 'supus_for_task_add_executions', TaskIsActive())
+@router.callback_query(F.data == 'supus_for_task_add_executions', TaskIsActive(), SupportMidelware())
 async def process_open_task_add_executions(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(await sup_task_add_executions_text(state),
                                      reply_markup=sup_button_to_task_keyboard())
@@ -696,7 +696,7 @@ async def process_open_task_add_executions(callback: CallbackQuery, state: FSMCo
 
 
 # Ввод дополнительного кол-ва выполнений
-@router.message(StateFilter(FSMSupport.input_add_executions))
+@router.message(StateFilter(FSMSupport.input_add_executions), SupportMidelware())
 async def process_open_task_add_executions(message: Message, state: FSMContext):
     await message.delete()
     await state.update_data(add_executions=int(message.text))
@@ -707,7 +707,7 @@ async def process_open_task_add_executions(message: Message, state: FSMContext):
 
 
 # Подтверждение дополнительного кол-ва выполнений
-@router.callback_query(F.data == 'support_confirm_task_add_executions', TaskIsActive())
+@router.callback_query(F.data == 'support_confirm_task_add_executions', TaskIsActive(), SupportMidelware())
 async def confirm_task_add_executions(callback: CallbackQuery, state: FSMContext):
     notification = await task_add_executions(state)
     await callback.answer(notification, show_alert=True)
@@ -715,7 +715,7 @@ async def confirm_task_add_executions(callback: CallbackQuery, state: FSMContext
 
 
 # Уменьшить кол-во выполнений
-@router.callback_query(F.data == 'supus_for_task_reduce_executions', TaskIsActive())
+@router.callback_query(F.data == 'supus_for_task_reduce_executions', TaskIsActive(), SupportMidelware())
 async def process_task_reduce_executions(callback: CallbackQuery, state: FSMContext):
     await state.update_data(return_stb=False)
     await callback.message.edit_text(await sup_reduce_executions_text(state),
@@ -724,7 +724,7 @@ async def process_task_reduce_executions(callback: CallbackQuery, state: FSMCont
 
 
 # Указание того, что нужно все выполнения снятые перевести автору
-@router.callback_query(F.data == 'support_for_task_reduce_return_stb')
+@router.callback_query(F.data == 'support_for_task_reduce_return_stb', SupportMidelware())
 async def process_task_return_stb(callback: CallbackQuery, state: FSMContext):
     await change_return_flag(state)
     await callback.answer(await notification_for_reduce_executions(state))
@@ -733,7 +733,7 @@ async def process_task_return_stb(callback: CallbackQuery, state: FSMContext):
 
 
 # Ввод числа, на сколько нужно уменьшить кол-во выполнений
-@router.message(StateFilter(FSMSupport.input_reduce_exections))
+@router.message(StateFilter(FSMSupport.input_reduce_exections), SupportMidelware())
 async def process_task_reduse_executions(message: Message, state: FSMContext):
     await message.delete()
     await state.update_data(reduse_executions=int(message.text))
@@ -744,7 +744,7 @@ async def process_task_reduse_executions(message: Message, state: FSMContext):
 
 
 # Потдверждение уменьшения кол-ва выполнений
-@router.callback_query(F.data == 'support_confirm_task_reduse_executions', TaskIsActive())
+@router.callback_query(F.data == 'support_confirm_task_reduse_executions', TaskIsActive(), SupportMidelware())
 async def confirn_task_reduse_executions(callback: CallbackQuery, state: FSMContext):
     notification = await task_reduse_executions(state)
     await callback.answer(notification, show_alert=True)
@@ -762,7 +762,7 @@ async def open_all_task_info(obj: CallbackQuery | Message, state: FSMContext):
 
 
 # Открыть тех, кто делают задание
-@router.callback_query((F.data == 'supus_for_task_show_workers') | (F.data == 'support_update_info_about_workers'))
+@router.callback_query((F.data == 'supus_for_task_show_workers') | (F.data == 'support_update_info_about_workers'), SupportMidelware())
 async def open_show_workers_for_task(callback: CallbackQuery, state: FSMContext):
     await save_workers(state)
     await state.set_state(FSMSupport.input_user)
@@ -770,14 +770,14 @@ async def open_show_workers_for_task(callback: CallbackQuery, state: FSMContext)
 
 
 # Перейти на другую страницу воркеров
-@router.callback_query(F.data.startswith('supus_task_workers_page_'))
+@router.callback_query(F.data.startswith('supus_task_workers_page_'), SupportMidelware())
 async def open_other_page_workers(callback: CallbackQuery, state: FSMContext):
     page = int(callback.data[24:])
     await open_workers_list(callback, state, page)
 
 
 # Отфильтровать воркеров
-@router.callback_query(F.data.startswith("supus_sorted_workers_"))
+@router.callback_query(F.data.startswith("supus_sorted_workers_"), SupportMidelware())
 async def process_sorted_workers(callback: CallbackQuery, state: FSMContext):
     await sorted_task_workers(callback, state)
     await open_workers_list(callback, state)
@@ -790,7 +790,7 @@ async def open_workers_list(callback: CallbackQuery, state: FSMContext, page: in
 
 
 # Закрытие меню саппорта
-@router.callback_query(F.data == 'support_close_menu')
+@router.callback_query(F.data == 'support_close_menu', SupportMidelware())
 async def process_close_menu(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FSMSupport.neutral_state)
     await callback.message.delete()
