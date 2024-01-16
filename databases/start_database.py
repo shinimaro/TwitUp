@@ -610,7 +610,7 @@ class StartDB:
                 await connection.execute('CREATE TABLE task_check_materials('
                                          'materials_id SERIAL PRIMARY KEY,'
                                          'tasks_msg_id INT,'
-                                         'comment_id INT,'
+                                         'comment_id BIGINT,'
                                          'author_materials_id INT,'
                                          'worker_materials_id INT)')
 
@@ -635,7 +635,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('task_author_check')"):
                 await connection.execute('CREATE TABLE task_author_check('
                                          'task_id INT,'
-                                         'last_check TIMESTAMP WITH TIME ZONE,'
+                                         'last_check TIMESTAMP WITH TIME ZONE DEFAULT NOW(),'
                                          'do_not_check_flag BOOL DEFAULT False)')
 
     async def create_refills_referral_office_table(self):

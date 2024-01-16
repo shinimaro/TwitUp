@@ -5,7 +5,7 @@ from pyppeteer.page import Page
 from databases.database import Database
 from parsing.manage_webdrivers.master_function import Master
 from parsing.parsing_functions.find_functions import find_all_users, find_all_posts, find_all_retweets, \
-    find_all_comments, find_comment, find_ban_block, find_number_subs, find_all_users_list, find_post_block
+    find_all_comments, find_comment, find_ban_block, find_number_subs, find_post_block
 from parsing.parsing_functions.page_Interaction import PageInteraction
 
 db = Database()
@@ -13,18 +13,18 @@ db = Database()
 
 # Функция для поиска пользователя в лайках/ретвитах постах/подписках
 async def parsing_user_list(page: Page, user: str, link: str, count_amount: int | float = 100) -> bool:
-    users = set()
+    users = []
     page_interactions = PageInteraction(page, link)
     # Первоначальный поиск user из первых юзеров
     html = await page_interactions.open_first_users()
-    users.update(await find_all_users(html, page))
+    users.extend(user for user in (await find_all_users(html, page, [])) if user not in users)
     # Если не нашли юзера, уходим в цикл
     if user not in users:
         while len(users) <= count_amount:
             intermediate_len = len(users)
             # Берём новых пользователей
             html = await page_interactions.scroll()
-            users.update(await find_all_users(html, page))
+            users.extend(user for user in (await find_all_users(html, page, [])) if user not in users)
             # Нашли юзера всё ок
             if user in users:
                 return True
@@ -41,27 +41,27 @@ async def parsing_user_subscriptions(page: Page, user: str, link: str) -> list[s
     users = []
     page_interactions = PageInteraction(page, link)
     html = await page_interactions.open_first_users()
-    users.extend(username for username in await find_all_users_list(html, page) if username not in users)
+    users.extend(username for username in await find_all_users(html, page, []) if username not in users)
     if user not in users:
         while True:
             intermediate_len = len(users)
             html = await page_interactions.scroll()
-            users.extend(user for user in await find_all_users_list(html, page) if user not in users)
+            users.extend(user for user in await find_all_users(html, page, []) if user not in users)
             if user in users:
                 html = await page_interactions.scroll()
-                users.extend(username for username in await find_all_users_list(html, page) if username not in users)
+                users.extend(username for username in await find_all_users(html, page, []) if username not in users)
                 return users
             if intermediate_len == len(users):
                 break
     else:
         html = await page_interactions.scroll()
-        users.extend(username for username in await find_all_users_list(html, page) if username not in users)
+        users.extend(username for username in await find_all_users(html, page, []) if username not in users)
         return users
     return False  # Юзер не был найден
 
 
-# Функция, которая ищет пост среди лайкнувших
-async def parsing_likes_in_posts(page: Page, post: str, link: str, number_amount: int | float = 15) -> bool:
+# Функция, которая ищет пост среди других постов
+async def parsing_in_posts(page: Page, post: str, link: str, number_amount: int | float = 15) -> bool:
     posts = set()
     page_interactions = PageInteraction(page, link)
     # Открытие страницы и сбор первых 2-3 постов
@@ -72,6 +72,7 @@ async def parsing_likes_in_posts(page: Page, post: str, link: str, number_amount
         while len(posts) <= number_amount:
             intermediate_len = len(posts)
             html = await page_interactions.scroll()
+            # print('Получил html страницу после scroll', html)
             posts.update(await find_all_posts(html, page))
             # Нашли нужный пост и всё ок
             if post in posts:
@@ -84,7 +85,7 @@ async def parsing_likes_in_posts(page: Page, post: str, link: str, number_amount
     return False
 
 
-# Функция для поиска ретвита на странице пользователя
+# Функция ищущая ретвиты на странице пользователя (больше не ищет, т.к. просто перестала видеть теги о репосте)
 async def parsing_retweets_in_posts(page: Page, post: str, link: str, number_amount: int = 8) -> bool:
     retweets = set()
     page_interactions = PageInteraction(page, link)
@@ -121,7 +122,6 @@ async def parsing_comments_in_posts(page: Page, post: str, user: str, link: str,
     all_posts, com_link = await find_all_comments(html, [], user, post, page)
     if not isinstance(all_posts, str):
         while len(all_posts) <= number_amount:
-            # await asyncio.sleep(1231313123123)
             intermediate_len = len(all_posts)
             html = await page_interactions.scroll()
             all_posts, com_link = await find_all_comments(html, all_posts, user, post, page)
@@ -178,15 +178,19 @@ async def get_users_list(page: Page, link: str) -> list[str]:
     users_list = []
     page_interactions = PageInteraction(page, link)
     html = await page_interactions.open_first_users()
-    users_list.extend(user for user in await find_all_users_list(html, page) if user not in users_list)
+    users_list.extend(user for user in await find_all_users(html, page, []) if user not in users_list)
     while True:
         intermediate_len = len(users_list)
         # Берём новых пользователей
         html = await page_interactions.scroll()
-        users_list.extend(user for user in await find_all_users_list(html, page) if user not in users_list)
+        users_list.extend(user for user in await find_all_users(html, page, []) if user not in users_list)
         # Дошли до конца страницы
         if intermediate_len == len(users_list):
-            return users_list
+            await asyncio.sleep(2)
+            html = await page_interactions.scroll()
+            users_list.extend(user for user in await find_all_users(html, page, []) if user not in users_list)
+            if intermediate_len == len(users_list):
+                return users_list
 
 
 async def get_number_subs(page: Page, profile_link: str, find_subscribers_flag: bool = True) -> int | None:

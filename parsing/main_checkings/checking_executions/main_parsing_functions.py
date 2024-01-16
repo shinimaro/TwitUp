@@ -4,8 +4,8 @@ from typing import NamedTuple, TypedDict, Optional
 from pyppeteer.page import Page
 
 from databases.database import Database
-from parsing.parsing_functions.parsing_functions import parsing_likes_in_posts, parsing_user_list, \
-    parsing_retweets_in_posts, parsing_comments_in_posts, parsing_user_subscriptions
+from parsing.parsing_functions.parsing_functions import parsing_user_list, \
+    parsing_comments_in_posts, parsing_user_subscriptions, parsing_in_posts
 
 db = Database()
 
@@ -39,7 +39,8 @@ class CheckExecution:
 
     async def parsing_subscriptions(self, page: Page, tasks_msg_id: int, link_to_worker: str, link_to_author: str) -> None:
         """Проверка подписки"""
-        author_username = '@' + link_to_author[20:link_to_author.find('/', 20)]
+        author_username = '@' + link_to_author[20:]
+
         subs_list: list[str] | bool = await parsing_user_subscriptions(page, author_username, link_to_worker)
         if subs_list:
             await db.save_worker_cut(tasks_msg_id, *self._get_cut_users(subs_list, author_username))
@@ -54,14 +55,14 @@ class CheckExecution:
 
     async def parsing_likes(self, page: Page, link_to_user_likes: str, link_to_post_likes: str) -> None:
         """Проверка лайка"""
-        result: bool = await parsing_likes_in_posts(page, self.post, link_to_user_likes)
+        result: bool = await parsing_in_posts(page, self.post, link_to_user_likes)
         if not result:
             result: bool = await parsing_user_list(page, self.worker_username, link_to_post_likes)
         self._set_result_likes(result)
 
     async def parsing_retweets(self, page: Page, link_to_user_replies: str, link_to_post_retweets: str) -> None:
         """Проверка ретвита"""
-        result: bool = await parsing_retweets_in_posts(page, self.post, link_to_user_replies)
+        result: bool = await parsing_in_posts(page, self.post, link_to_user_replies)
         if not result:
             result: bool = await parsing_user_list(page, self.worker_username, link_to_post_retweets)
         self._set_result_retweets(result)

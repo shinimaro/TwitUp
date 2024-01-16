@@ -2,7 +2,7 @@ import asyncio
 from typing import NoReturn
 
 from aiogram import Dispatcher, Bot
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage, Redis
 from aiogram.types import BotCommand
 
 from bot_apps.bot_parts.adding_task import adding_task_handlers
@@ -36,6 +36,7 @@ from parsing.manage_webdrivers.master_function import Master
 
 start_db = StartDB()
 re_checking = ReCheckExecution()
+config = load_config()
 
 
 async def main():
@@ -48,16 +49,12 @@ async def main():
 
 
 async def _start_bot() -> NoReturn:
-    storage = MemoryStorage()
-    # from aiogram.fsm.storage.redis import RedisStorage, Redis
-    # redis = Redis(host='localhost', db=0)
-    # storage = RedisStorage(redis=redis)
-    config = load_config()
+    redis = Redis(host='localhost', db=0)
+    storage = RedisStorage(redis=redis)
     bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
     dp = Dispatcher(storage=storage)
     print('Бот работает')
     dp.include_router(main_menu_handlers.router)  # Поставлен фильтр на сообщения
-    # dp.include_router(sending_task.router)  # Убрать
     dp.include_router(task_push_handlers.router)
     dp.include_router(personal_task_handlers.router)
     dp.include_router(admin_panel_handlers.router)
@@ -72,7 +69,6 @@ async def _start_bot() -> NoReturn:
     dp.include_router(errors_handlers.router)
     await bot.delete_webhook(drop_pending_updates=True)
     dp.startup.register(bot_menu_builder)
-    # await methods.set_webhook.SetWebhook(url=, ip_address=)  # Вставить сюда url для регистрации вебхука
     await dp.start_polling(bot)
 
 

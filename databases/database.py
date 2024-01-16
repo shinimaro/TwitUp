@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import re
 from typing import Literal
@@ -1328,6 +1329,8 @@ class Database:
                 await connection.execute("UPDATE admins SET admin_balance = admin_balance + $1 WHERE telegram_id = (SELECT telegram_id FROM admins WHERE main_recipient_flag = True)", commission)
                 # Запись о поступлении на баланс главного админа
                 await connection.execute("INSERT INTO admins_receipts(sum_receipt, type_receipt, id_receipt) VALUES ($1, 'commission', (SELECT telegram_id FROM admins WHERE main_recipient_flag = True))", commission)
+                # Запись о перепроверке ссылок таска на жизнь
+                await connection.execute("INSERT INTO task_author_check(task_id, last_check) VALUES ($1, NOW())", task_id)
                 # Заполнение всех типов заданий
                 for task in types_tasks:
                     if task == 'subscriptions':
@@ -2646,8 +2649,9 @@ class Database:
             keys = ['stage_1', 'stage_2', 'stage_3', 'stage_4']
             result_dict = {}
             for task in tasks:
+                after_time_hours = (datetime.datetime.now(pytz.timezone('Europe/Moscow')) - task['date_of_completion'].astimezone(pytz.timezone('Europe/Moscow'))).total_seconds() / 3600
                 for key in keys:
-                    if task[key] is None and (datetime.datetime.now(pytz.timezone('Europe/Moscow')) - task['date_of_completion'].astimezone(pytz.timezone('Europe/Moscow'))).total_seconds() / 3600 > time_dict[key]:
+                    if task[key] is None and after_time_hours > time_dict[key]:
                         need_stage = int(key[6:])
                         result_dict[task['tasks_msg_id']] = need_stage
                         break
@@ -2721,7 +2725,7 @@ class Database:
     async def save_comment(self, tasks_msg_id, comment_link):
         async with self.pool.acquire() as connection:
             comment_id = int(comment_link.split('/status/')[-1])
-            if await self.check_task_materials(tasks_msg_id):
+            if not await self.check_task_materials(tasks_msg_id):
                 await connection.execute('UPDATE task_check_materials SET comment_id = $1 WHERE tasks_msg_id = $2', comment_id, tasks_msg_id)
             else:
                 await connection.execute("INSERT INTO task_check_materials(tasks_msg_id, comment_id) VALUES ($1, $2)", tasks_msg_id, comment_id)
@@ -2730,7 +2734,7 @@ class Database:
     async def save_worker_cut(self, tasks_msg_id, upper_cut, lower_cut):
         async with self.pool.acquire() as connection:
             worker_materials_id = await connection.fetchval('INSERT INTO worker_materials(upper_cut, lower_cut) VALUES ($1::VARCHAR[], $2::VARCHAR[]) RETURNING worker_materials_id', upper_cut, lower_cut)
-            if await self.check_task_materials(tasks_msg_id):
+            if not await self.check_task_materials(tasks_msg_id):
                 await connection.execute('INSERT INTO task_check_materials(tasks_msg_id, worker_materials_id) VALUES ($1, $2)', tasks_msg_id, worker_materials_id)
             else:
                 await connection.execute('UPDATE task_check_materials SET worker_materials_id = $1 WHERE tasks_msg_id = $2', worker_materials_id, tasks_msg_id)
@@ -2753,6 +2757,7 @@ class Database:
             hours_check = 5
             # Запрос отбирает только те ссылки, которые ещё не были проверены в течении последних 5 часов
             all_tasks = await connection.fetch("SELECT task_id, MAX(CASE WHEN actions.link_action NOT LIKE '%/status/%' AND actions.link_action NOT IN (SELECT link_action FROM tasks RIGHT JOIN actions USING(task_id) JOIN task_author_check USING(task_id) WHERE NOW() - last_check < $1 * INTERVAL '1 hours') THEN actions.link_action ELSE NULL END) as profile_link, MAX(CASE WHEN actions.link_action LIKE '%/status/%' AND actions.link_action NOT IN (SELECT link_action FROM tasks RIGHT JOIN actions USING(task_id) JOIN task_author_check USING(task_id) WHERE NOW() - last_check < $1 * INTERVAL '1 hours') THEN actions.link_action ELSE NULL END) as post_link FROM tasks RIGHT JOIN actions USING(task_id) JOIN task_author_check USING(task_id) WHERE do_not_check_flag = False AND (last_check IS NULL OR NOW() - last_check > $1 * INTERVAL '1 hours') AND NOW() - tasks.date_of_creation > INTERVAL '2 hours' AND task_id IN (SELECT task_id FROM tasks_messages WHERE tasks_msg_id = ANY($2)) GROUP BY task_id;", hours_check, tasks_ids)
+
             finally_list = []
             for task in all_tasks:
                 finally_list.append(AuthorTaskInfo(

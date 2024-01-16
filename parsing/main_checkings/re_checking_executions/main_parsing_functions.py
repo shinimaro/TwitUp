@@ -4,11 +4,12 @@ from typing import TypedDict
 from pyppeteer.page import Page
 
 from bot_apps.bot_parts.task_push.task_push_filters import comment_check_itself
+from parsing.elements_storage.elements_dictionary import base_links
 from parsing.main_checkings.re_checking_executions.elements_control import SubscuptionsFlag, \
     collect_info_about_subs_flags, \
     search_for_user_in_slice
 from parsing.parsing_functions.parsing_functions import checking_account_for_life, get_users_list, \
-    parsing_likes_in_posts, parsing_user_list, get_comment_text
+    parsing_user_list, get_comment_text, parsing_in_posts
 
 
 class ReActionsDict(TypedDict):
@@ -37,17 +38,18 @@ class ReCheckExecutions:
             self._change_subscroptions_flag(False)
         else:
             subs_flag: SubscuptionsFlag = await self._set_subs_flags(page, profile_worker_link, profile_author_link)
-            if not await self._check_worker_subscriptions(page, subscriptions_worker_link, cut_dict, subs_flag):
-                self._change_subscroptions_flag(False)
+            author_username = f"@{profile_author_link[len(base_links['home_page']):]}"
+            if await self._check_worker_subscriptions(page, subscriptions_worker_link, author_username, cut_dict, subs_flag):
+                self._change_subscroptions_flag(True)
             else:
-                if not self._check_author_followers(page, suscribers_author_link, cut_dict, subs_flag):
-                    self._change_subscroptions_flag(False)
-                else:
+                if await self._check_author_followers(page, suscribers_author_link, cut_dict, subs_flag):
                     self._change_subscroptions_flag(True)
+                else:
+                    self._change_subscroptions_flag(False)
 
     async def re_checking_likes(self, page: Page, link_to_user_likes: str) -> None:
-        """Проверяем конкретно в посте """
-        result = await parsing_likes_in_posts(page, self.post, link_to_user_likes, math.inf)
+        """Проверяем лайки в списке лайкнутых постов юзера"""
+        result = await parsing_in_posts(page, self.post, link_to_user_likes, math.inf)
         self._change_likes_flag(result)
 
     async def re_checking_retweets(self, page: Page, link_to_post_retweets: str) -> None:
@@ -74,11 +76,12 @@ class ReCheckExecutions:
     async def _check_worker_subscriptions(self,
                                           page: Page,
                                           subscriptions_worker_link: str,
+                                          author_username: str,
                                           cut_dict: dict,
                                           subs_flags: SubscuptionsFlag) -> bool:
         """Поиск аккаунт автора в подписках юзера"""
         worker_subs: list[str] = await get_users_list(page, subscriptions_worker_link)  # Собираем все подписки воркера
-        check_worker: bool = await search_for_user_in_slice(worker_subs, self.worker_username, cut_dict)  # Поиск в подписках у юзера
+        check_worker: bool = search_for_user_in_slice(worker_subs, author_username, cut_dict)  # Поиск в подписках у юзера
         # Если в читаемых у юзера аккаунта не было и у него менее 50 подписок = бан
         if (self.worker_username not in worker_subs and subs_flags.worker_flag) or not check_worker:
             return False
@@ -91,10 +94,10 @@ class ReCheckExecutions:
                                       subs_flags: SubscuptionsFlag) -> bool:
         """Поиск аккаунта воркера в подписчиках автора"""
         author_subs: list[str] = await get_users_list(page, suscribers_author_link)  # Собираем всех подписчиков автора
-        check_author: bool = await search_for_user_in_slice(author_subs,
-                                                            self.worker_username,
-                                                            cut_dict,
-                                                            workers_cuts_flag=False)  # Поиск в подписчиках автора
+        check_author: bool = search_for_user_in_slice(author_subs,
+                                                      self.worker_username,
+                                                      cut_dict,
+                                                      workers_cuts_flag=False)  # Поиск в подписчиках автора
         if (self.worker_username not in author_subs and subs_flags.author_flag) or not check_author:
             return False
         return True
@@ -114,5 +117,7 @@ class ReCheckExecutions:
     def _change_comments_flag(self, value: bool) -> None:
         """Поменять флаг проверки комментариев"""
         self.actions_dict['comments'] = value
+
+
 
 

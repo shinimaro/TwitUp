@@ -45,7 +45,7 @@ class AllOurUsers:
                             parsing_interaction = PageInteraction(self.common_page, '')  # Потом убрать
                             await parsing_interaction.scroll()
                             html = await self.common_page.content()
-                            users.update(await find_all_users(html, self.common_page))
+                            users.update(await find_all_users(html, self.common_page, []))
                         self.all_our_users = users
                         break
             except TimeoutError:

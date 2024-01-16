@@ -47,13 +47,13 @@ class StartChecking(BaseStartChecking):
     async def _set_check_executions(self) -> None:
         """Взять все данные, необходимые для проверки выполнения"""
         self.check_execution = CheckExecution(action_dict=self.actions_dict,
-                                              worker_username=await db.get_worker_username(self.tasks_msg_id),
+                                              worker_username=(await db.get_worker_username(self.tasks_msg_id)).lower(),
                                               post=self._get_links_on_actions().post_link)
 
     async def _set_need_args_for_parsing(self) -> None:
         """Получить аргументы и функции для парсинга"""
         links_on_actions = self._get_links_on_actions()
-        worker_username = await db.get_worker_username(self.tasks_msg_id)
+        worker_username = (await db.get_worker_username(self.tasks_msg_id)).lower()
         base_link_to_worker = f'{base_links["home_page"]}{worker_username}'
         self.parsing_args = ParsingArgs(
             parsing_args={
@@ -68,11 +68,9 @@ class StartChecking(BaseStartChecking):
 
     def _full_out_tasks_list(self) -> None:
         """Заполнить список задач для их параллельного запуска"""
-        # for action in self.actions_dict:
-        #     page = self.page_list.pop(0)
-        #     self.tasks.extend([self.parsing_args.functions_dict[action](page, *self.parsing_args.parsing_args[action])])
-        self.tasks.extend(self.parsing_args.functions_dict[action](self.page_list.pop(0), *self.parsing_args.parsing_args[action]) for action in self.actions_dict)
-        # self.tasks.extend([self.parsing_args.functions_dict[action](self.page_list.pop(0), *self.parsing_args.parsing_args[action]) for action in self.actions_dict])
+        for action in self.actions_dict:
+            page = self.page_list.pop(0)
+            self.tasks.extend([self.parsing_args.functions_dict[action](page, *self.parsing_args.parsing_args[action])])
 
     def _set_failure_check(self):
         """Установка того, что проверка не удалась"""
@@ -81,3 +79,14 @@ class StartChecking(BaseStartChecking):
     def _apply_default_completion_to_all(self):
         """Заочно проставляем выполнение всем остальным действиям, чтобы дальнейшая проверка на них не отвлекалась"""
         self.actions_dict = {key: True if value is None else value for key, value in self.actions_dict.items()}
+
+
+
+async def sus():
+    await db.connect()
+    a = StartChecking(1)
+    a = await a.start_checking()
+    print(a)
+    await asyncio.sleep(123123123123123)
+
+asyncio.get_event_loop().run_until_complete(sus())

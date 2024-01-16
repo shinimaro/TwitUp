@@ -4,3 +4,5 @@ accounts.txt
 .mypy_cache/
 .vscode/
 __pycache__/
+parsing/manage_webdrivers/cookies/
+

@@ -1,10 +1,11 @@
+import asyncio
 import os
 import os
 import pickle
 
 import aiofiles
 from pyppeteer.page import Page
-
+from asyncio import sleep
 from config import load_config
 from parsing.elements_storage.elements_dictionary import login_blocks, converter, base_links
 
@@ -19,7 +20,7 @@ async def save_cookies(cookies, login: str) -> None:
         await file.write(pickle.dumps(cookies))
 
 
-async def twitter_login(page: Page, login: str, password: str) -> None:
+async def twitter_login(page: Page, login: str, password: str, ) -> bool:
     timeout = 5000
     for _ in range(3):
         try:
@@ -36,15 +37,18 @@ async def twitter_login(page: Page, login: str, password: str) -> None:
             # Нажатие на кнопку авторизации
             await page.waitForSelector(login_blocks['login_button'], timeout=timeout)
             await page.click(login_blocks['login_button'])
+            await sleep(2)  # Небольшая задержка после логирования
             # Ожидаем минимальной прогрузки элементов главной страницы
-            await page.waitForNavigation()
-            # Сохраняем все куки в соответствующем фалйе, даже если он уже существует
+            await page.goto(base_links['home_page'], timeout=timeout)
+            # Сохраняем/обновляем все куки в соответствующем файле
             cookies = await page.cookies()
             await save_cookies(cookies, login)
-            break
+            return True
         except TimeoutError:
             timeout += 5000
     else:
         print(f'Ошибка авторизации аккаунта {login}')
+        return False
+
 
 

@@ -1,5 +1,6 @@
 import asyncio
 import math
+import random
 from asyncio import sleep, gather
 from typing import NoReturn
 
@@ -13,6 +14,7 @@ from config import load_config
 from databases.database import Database
 from databases.dataclasses_storage import AuthorTaskInfo
 from parsing.main_checkings.re_checking_executions.start_re_checking import StartReChecking
+from parsing.manage_webdrivers.master_function import Master
 from parsing.other_parsing.check_author_links import check_author_links, CheckAuthorLinks
 
 config = load_config()
@@ -51,10 +53,11 @@ class ReCheckExecution:
 
     def _select_author_tasks(self) -> None:
         """Взять новую пачку заданий по перепроверке ссылок авторов"""
-        for task_index in range(self._get_max_webdrivers()):
+        for task_index in range(min(self._get_max_webdrivers(), len(self.authors_tasks_list))):
             self.tasks_ids_list.append(self.authors_tasks_list[task_index])
             self.tasks.extend([self._check_author_task_on_life(self.authors_tasks_list[task_index])])
-            self.authors_tasks_list.remove(self.authors_tasks_list[task_index])
+        # Удаление элементов после завершения итерации
+        self.authors_tasks_list = self.authors_tasks_list[self._get_max_webdrivers():]
 
     async def _update_last_check_on_author_tasks(self) -> None:
         """Обновить время последней перепроверки на тасках"""
@@ -70,7 +73,6 @@ class ReCheckExecution:
             await db.not_checking_task_flag(task_info.task_id)
         if not check_dict['profile']:
             # Флаг на задание все связанные с этой ссылкой и в табличке на проверялку do_not_check_flag
-            # Флаг на все подобные
             await db.not_checking_task_flag(task_info.task_id)
             await db.not_checking_by_link(task_info.links.account_link)
 
@@ -96,15 +98,16 @@ class ReCheckExecution:
                     break
                 elif task_stage == stage:
                     self.check_queue[task_id] = task_stage
-                    self.all_tasks_dict.pop(task_id)
+        # Убрать лишние ключи
+        self.all_tasks_dict = {key: value for key, value in self.all_tasks_dict.items() if key not in set(self.check_queue)}
 
     def _get_values_for_rounds(self) -> dict[int, float]:
         """Получить макс длину итогового словаря для каждого раунда"""
         available_webdrivers = self._get_max_webdrivers()
         return {1: available_webdrivers * 0.5,
                 2: available_webdrivers * 0.75,
-                3: available_webdrivers * 0.85,
-                4: available_webdrivers}
+                3: available_webdrivers * 0.90,
+                4: available_webdrivers * 1}
 
     @staticmethod
     def _get_max_webdrivers() -> int:
@@ -114,7 +117,7 @@ class ReCheckExecution:
     async def _re_check_of_execution_main(self, tasks_msg_id: int, task_stage: int) -> None:
         """Основная функция для перепроверки выполнения задания"""
         re_checking = StartReChecking(tasks_msg_id)
-        result = asyncio.get_event_loop().create_task(re_checking.start_re_checking())
+        result = await re_checking.start_re_checking()
         if result:
             await db.change_re_check_stage(tasks_msg_id, task_stage)
         else:
@@ -146,17 +149,28 @@ class ReCheckExecution:
                 fines_info.cut,
                 fines_info.remaining_amount) if fines_info.cut_flag else '')
 
-    async def sus(self):
-        await sleep(10)
-
     async def re_check_checker(self) -> NoReturn:
         """Функция, вызывающая перепроверку заданий"""
         standart_sleep = 5 * 60
         while True:
-            task = asyncio.get_event_loop().create_task(self.sus())
+            task = asyncio.get_event_loop().create_task(self.start_re_check_of_execution())
             await sleep(standart_sleep)
             while not task.done():
                 await send_notification_to_admin(
                     notifications_to_admin['have_not_webdriwers'].format(len(self.all_tasks_dict)))
                 await sleep(standart_sleep if not self.check_queue
                             else len(self.check_queue) * 5)
+
+
+
+async def sus():
+    await db.connect()
+    re_checking = ReCheckExecution()
+    await re_checking.start_re_check_of_execution()
+    await asyncio.sleep(123123123123123)
+
+
+# dict = {i: random.randint(1, 4) for i in range(1, 101)}
+# print(dict)
+
+asyncio.get_event_loop().run_until_complete(sus())

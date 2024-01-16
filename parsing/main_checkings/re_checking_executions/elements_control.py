@@ -21,7 +21,7 @@ async def collect_info_about_subs_flags(page: Page, profile_worker_link: str, pr
         author_flag=False if author_sub < num_ceiling else True)
 
 
-async def search_for_user_in_slice(users: list[str], user: str, cuts_dict, workers_cuts_flag=True) -> bool:
+def search_for_user_in_slice(users: list[str], user: str, cuts_dict, workers_cuts_flag=True) -> bool:
     """Найти юзера, либо в списке, либо в срезе"""
     if user in users:
         return True
@@ -35,6 +35,8 @@ async def search_for_user_in_slice(users: list[str], user: str, cuts_dict, worke
 
 def _search_by_slice(users: list[str], upper_cut: list[str], lower_cut: list[str]) -> bool:
     """Поиск по срезу"""
+    upper_cut = [] if not upper_cut else upper_cut
+    lower_cut = [] if not lower_cut else lower_cut
     upper_counter, lower_counter = 0, 0
     for user in users:
         upper_counter += 1 if user in upper_cut else 0

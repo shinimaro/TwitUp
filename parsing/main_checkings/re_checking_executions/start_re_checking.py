@@ -19,7 +19,7 @@ class ReChecingArgs:
 
 class StartReChecking(BaseStartChecking):
     """Класс для перепроверки выполнений"""
-    def __init__(self, tasks_msg_id):
+    def __init__(self, tasks_msg_id: int):
         super().__init__(tasks_msg_id)
         self.re_check_execution: Optional[ReCheckExecutions] = None
         self.re_checking_args: Optional[ReChecingArgs] = None
@@ -45,13 +45,13 @@ class StartReChecking(BaseStartChecking):
     async def _set_re_check_execution(self) -> None:
         """Взять все данные, необходимые для проверки выполнения"""
         self.re_check_execution = ReCheckExecutions(actions_dict=self.actions_dict,
-                                                    workerk_username=await db.get_worker_username(self.tasks_msg_id),
+                                                    workerk_username=(await db.get_worker_username(self.tasks_msg_id)).lower(),
                                                     post=self._get_links_on_actions().post_link)
 
     async def _set_need_args_for_re_checking(self) -> None:
         """Получить аргументы и функции для парсинга"""
         links_on_actions = self._get_links_on_actions()
-        worker_username = await db.get_worker_username(self.tasks_msg_id)
+        worker_username = (await db.get_worker_username(self.tasks_msg_id)).lower()
         base_link_to_worker = f'{base_links["home_page"]}{worker_username}'
         link_to_worker_id: int | None = await db.get_link_to_worker_comment(self.tasks_msg_id)
         cut_dict = await db.get_all_cut(self.tasks_msg_id)

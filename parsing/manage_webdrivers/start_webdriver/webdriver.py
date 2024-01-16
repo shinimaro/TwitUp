@@ -34,47 +34,53 @@ class TwitterAccount:
 async def webdriver():
     pass
 
+
 class Webdrivers:
     headless_mode: bool = False
     twitter_accounts: dict[str, TwitterAccount] = {}
     account_generator: Optional[Callable] = None
-    current_page: Page = None
-    current_driver: Browser = None
-    current_login: str = None
+
+    def __init__(self):
+        self.current_login: str = Webdrivers._set_current_login()
+        self.current_page: Optional[Page] = None
+        self.current_driver: Optional[Browser] = None
 
     # Создание нового вебдрайвера
     async def webdriver(self) -> Browser:
-        await self._set_current_login()
         await self._set_current_driver()
         await self._set_current_page()
         await self._load_cookie()
         await self._set_proxy_autentification()
         if await self._load_base_twitter_url():
-            return Webdrivers.current_driver
+            return self.current_driver
         else:
-            await Webdrivers.current_driver.close()
+            await self.current_driver.close()
+            await self.webdriver()
 
         # Пример настройки мобильного прокси, которое pypetter сам будет менять
         # proxy_endpoint = "http://username:password@p.webshare.io:80"
         # browser = await launch(args=[f'--proxy-server={proxy_endpoint}'])
 
-    async def _set_current_login(self) -> None:
+    @classmethod
+    def _set_current_login(cls) -> str:
         """Выдать новый логин аккаунта"""
         if Webdrivers.account_generator:
-            Webdrivers.current_login = next(Webdrivers.account_generator)
+            return next(Webdrivers.account_generator)
         else:
             # Если генератор не был инициализирован, делаем распаковку и инициализацию
-            self._start_webdriver()
-            Webdrivers.current_login = next(Webdrivers.account_generator)
+            cls._start_webdriver()
+            return next(Webdrivers.account_generator)
 
-    def _start_webdriver(self):
+    @classmethod
+    def _start_webdriver(cls):
         # Формирование словаря и инициализация общего генератора
-        self._unpacking_twitter_accounts()
-        Webdrivers.account_generator = self._issue_new_account()
+        cls._unpacking_twitter_accounts()
+        Webdrivers.account_generator = cls._issue_new_account()
 
-    def _unpacking_twitter_accounts(self):
+    @classmethod
+    def _unpacking_twitter_accounts(cls):
         """Формирование словаря с аккаунтами"""
-        file_path = self._get_accounts_file_path()
+        file_path = cls._get_accounts_file_path()
         with open(file_path, 'r', encoding='utf-8') as file:
             all_accounts = file.read()
         for info in all_accounts.split('\n'):
@@ -95,25 +101,22 @@ class Webdrivers:
 
     async def _set_current_driver(self):
         proxy_server = self._get_proxy_server()
-        Webdrivers.current_driver = await launch(headless=Webdrivers.headless_mode, args=[proxy_server])
+        self.current_driver = await launch(headless=Webdrivers.headless_mode, args=[proxy_server])
 
-    @classmethod
-    def _get_proxy_server(cls) -> str:
-        return f"--proxy-server={cls.twitter_accounts[cls.current_login].proxy.proxy_host}:{cls.twitter_accounts[cls.current_login].proxy.proxy_port}"
+    def _get_proxy_server(self) -> str:
+        return f"--proxy-server={Webdrivers.twitter_accounts[self.current_login].proxy.proxy_host}:{Webdrivers.twitter_accounts[self.current_login].proxy.proxy_port}"
 
-    @classmethod
-    async def _set_current_page(cls):
-        cls.current_page = (await cls.current_driver.pages())[0]
+    async def _set_current_page(self):
+        self.current_page = (await self.current_driver.pages())[0]
 
-    @classmethod
-    async def _set_proxy_autentification(cls):
-        await cls.current_page.authenticate(
-            {'username': Webdrivers.twitter_accounts[Webdrivers.current_login].proxy.proxy_login,
-             'password': Webdrivers.twitter_accounts[Webdrivers.current_login].proxy.proxy_password})
+    async def _set_proxy_autentification(self):
+        await self.current_page.authenticate(
+            {'username': Webdrivers.twitter_accounts[self.current_login].proxy.proxy_login,
+             'password': Webdrivers.twitter_accounts[self.current_login].proxy.proxy_password})
 
     async def _load_cookie(self):
         cookies = await self._load_cookies()
-        await Webdrivers.current_page.setCookie(*cookies)
+        await self.current_page.setCookie(*cookies)
 
     async def _load_cookies(self) -> IO[bytes]:
         """Загрузка cookie"""
@@ -123,39 +126,28 @@ class Webdrivers:
 
     async def _load_base_twitter_url(self) -> bool:
         """Загрузка главной страницы твиттера и проверка на то, что аккаунт залогинен"""
-        timeout = 10000
-        for _ in range(2):
+        timeout = 5000
+        for _ in range(3):
             try:
-                await Webdrivers.current_page.goto(base_links['home_page'], timeout=timeout)
-                break
+                await self.current_page.goto(base_links['home_page'], timeout=timeout)
+                await self.current_page.waitForSelector(converter(other_blocks['publish_button']), timeout=timeout)
+                return True
             except pyppeteer.errors.TimeoutError:
                 timeout += 10000
         else:
-            print(f'Не удалось загрузить страницу в {Webdrivers.current_login}')
-            return False
-        return await self._check_home_page()
-
-    async def _check_home_page(self) -> bool:
-        try:
-            # Если бот находится на домашней странице и всё ок
-            await Webdrivers.current_page.waitForSelector(converter(other_blocks['publish_button']), timeout=5000)
-            return True
-        except pyppeteer.errors.TimeoutError:
-            # Если бота выкинуло на страницу для входа в аккаунт
+            print(f'Не удалось загрузить страницу в {self.current_login}')
             return await self._login_account()
 
-    @classmethod
-    async def _login_account(cls):
+    async def _login_account(self):
         """Попытка залогинить аккаунт"""
         try:
-            await cls.current_page.goto(base_links['login_page'])
-            await cls.current_page.waitForSelector(login_blocks['username_input'], timeout=8000)
-            password = cls.twitter_accounts[cls.current_login].password
-            print(f'Пробую залогинить аккаунт {cls.current_login}')
-            await twitter_login(cls.current_page, cls.current_login, password)
-            return True
+            await self.current_page.goto(base_links['login_page'])
+            await self.current_page.waitForSelector(login_blocks['username_input'], timeout=8000)
+            password = Webdrivers.twitter_accounts[self.current_login].password
+            print(f'Пробую залогинить аккаунт {self.current_login}')
+            return await twitter_login(self.current_page, self.current_login, password)
         except pyppeteer.errors.TimeoutError:
-            print(f'Аккаунт {cls.current_login} попал куда-то непонятно куда, ни на страницу для входа, ни на домашнюю страницу')
+            print(f'Аккаунт {self.current_login} попал куда-то непонятно куда, ни на страницу для входа, ни на домашнюю страницу')
             return False
 
     @staticmethod
@@ -164,8 +156,7 @@ class Webdrivers:
         current_file_dir = os.path.dirname(__file__)
         return os.path.join(current_file_dir, '../..', '..', 'accounts.txt')
 
-    @classmethod
-    def _get_cookies_file_path(cls) -> str:
+    def _get_cookies_file_path(self) -> str:
         """Выдать путь до куки"""
         current_file_dir = os.path.dirname(__file__)
-        return os.path.join(current_file_dir, '..', f'./cookies/{cls.current_login}_cookies.pkl')
+        return os.path.join(current_file_dir, '..', f'./cookies/{self.current_login}_cookies.pkl')
