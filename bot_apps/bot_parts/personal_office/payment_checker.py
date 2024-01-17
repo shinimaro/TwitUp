@@ -1,4 +1,9 @@
-from dataclasses import dataclass
+import asyncio
+import datetime
+import time
+from asyncio import sleep
+from decimal import Decimal
+from typing import Literal, TypedDict
 
 from aiogram import Bot
 
@@ -8,6 +13,7 @@ from bot_apps.other_apps.filters.limits_filters.message_limit_filter import Mess
 from bot_apps.other_apps.wordbank import payment
 from config import load_config
 from databases.database import Database
+from databases.dataclasses_storage import PaymentData
 
 db = Database()
 config = load_config()
@@ -15,23 +21,43 @@ bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
 message_filter = MessageFilter()
 
 
-# Хранилище вместо редиса
-@dataclass()
-class PaymentData:
-    payment_data = ''
+class PaymentReceived(TypedDict):
+    id: int
+    walletId: str
+    token: Literal['USDT', 'BUSD', 'USDC']
+    value: int
+    usd: Decimal
+    txid: str
+    chain: int
+    timestamp: int
+    time: datetime.datetime
 
 
 async def payment_checker() -> None:
     crypto_pay = CryptoPay()
-    last_id = '0'
     while True:
-        last_id, new_trancactions = crypto_pay.Transactions(last_id)
+        valid_wallets: bool = await db.check_valid_wallets()
+        if valid_wallets:
+            last_id: int = await db.get_last_trancaction_id() + 1  # Находим id, с которого стоит начать поиск
+            payment_received: list[PaymentReceived] = (crypto_pay.Transactions(str(last_id)))[1]  # Забираем информацию о транзакциях
+            cost_stb: float = await db.get_stb_coint_cost()  # Берём актуальный курс нашей монети
+            for trancaction_dict in payment_received:  # Отдельно обрабатываем каждую полученную транзакцию
+                await _payment_completed(
+                    PaymentData(
+                        transaction_id=trancaction_dict['id'],
+                        wallet_id=int(trancaction_dict['walletId']),
+                        amount=trancaction_dict['usd'],
+                        issued_by_stb=trancaction_dict['usd'] * Decimal(cost_stb),
+                        payment_date=trancaction_dict['time'],
+                        token=trancaction_dict['token']))
+        await sleep(30)
 
 
-async def _payment_completed(tg_id, amount_payment, issued_by_stb, payment_method) -> None:
+async def _payment_completed(payment_data: PaymentData) -> None:
     """Обновление баланса и запись в бд о пополнении"""
-    await db.record_of_payment(tg_id, amount_payment, issued_by_stb, payment_method)
-    await db.update_user_balance_afrter_payment(tg_id, issued_by_stb)
+    tg_id: int = await db.record_of_payment(payment_data)
+    await db.update_user_balance_afrter_payment(tg_id, payment_data.issued_by_stb)
+    await _send_message_on_payment(tg_id, payment_data.issued_by_stb)
 
 
 async def _send_message_on_payment(tg_id: int, issued_by_stb) -> None:

@@ -34,7 +34,6 @@ class ReCheckExecution:
 
     async def start_re_check_of_execution(self) -> None:
         """Строж, находящий задания, выполнение которых необходимо перепроверить"""
-        print('Запуск перепроверок')
         await self._checking_all_authors_tasks()
         await self._checking_executions_tasks()
         # Функция для обновления времени последней перепроверки
@@ -160,17 +159,3 @@ class ReCheckExecution:
                     notifications_to_admin['have_not_webdriwers'].format(len(self.all_tasks_dict)))
                 await sleep(standart_sleep if not self.check_queue
                             else len(self.check_queue) * 5)
-
-
-
-async def sus():
-    await db.connect()
-    re_checking = ReCheckExecution()
-    await re_checking.start_re_check_of_execution()
-    await asyncio.sleep(123123123123123)
-
-
-# dict = {i: random.randint(1, 4) for i in range(1, 101)}
-# print(dict)
-
-asyncio.get_event_loop().run_until_complete(sus())

@@ -36,7 +36,7 @@ async def webdriver():
 
 
 class Webdrivers:
-    headless_mode: bool = False
+    headless_mode: bool = True
     twitter_accounts: dict[str, TwitterAccount] = {}
     account_generator: Optional[Callable] = None
 

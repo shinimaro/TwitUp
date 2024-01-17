@@ -136,7 +136,6 @@ async def find_ban_block(html_page: str, page: Page) -> bool:
             # if not_account_block:
             #     return True
         except (AttributeError, TypeError):
-            print('Атрибут ерор')
             await sleep(0.5)
             html_page = await page.content()
     return False

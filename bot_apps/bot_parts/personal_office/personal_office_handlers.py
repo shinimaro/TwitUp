@@ -1,8 +1,10 @@
 import math
 import math
 import random
+import time
 from asyncio import sleep
 
+import base58
 from aiogram import Router, Bot, F
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
@@ -423,10 +425,8 @@ async def open_history_list_page(callback: CallbackQuery, state: FSMContext):
 # Пользователь пополняет свой баланс из личного кабинета
 @router.callback_query((F.data == 'pay') | (F.data == 'first_pay_from_add_task') | (F.data == 'pay_from_add_task'))
 async def process_start_pay(callback: CallbackQuery, state: FSMContext):
-    # dollar = crypto_pay.Rates()
-    dollar = 99.17
-    stb = dollar * 1
-    text = payment['main_text'].format(dollar, stb)
+    cost_stb: float = round_numbers(await db.get_stb_coint_cost())
+    text = payment['main_text'].format(cost_stb)
     reply_markup = await payment_keyboard_builder(callback.from_user.id, callback.data)
     # Проверка на то, что пользователь переходит из уведомления о завершении задания (в этом случае необходимо менять основной интерфейс)
     if await db.get_main_interface(callback.from_user.id) != callback.message.message_id:
@@ -442,11 +442,9 @@ async def process_start_pay(callback: CallbackQuery, state: FSMContext):
 # Возврат обратно к пополнению
 @router.callback_query(F.data == 'back_to_pay')
 async def process_back_to_pay(callback: CallbackQuery, state: FSMContext):
-    dollar = 99.17
-    cost_stb: float = await db.get_stb_coint_cost()
-    stb = dollar * cost_stb
+    cost_stb: float = round_numbers(await db.get_stb_coint_cost())
     reply_markup = await payment_keyboard_builder(callback.from_user.id, PaymentData.payment_data)
-    await callback.message.edit_text(text=payment['main_text'].format(dollar, stb), reply_markup=reply_markup)
+    await callback.message.edit_text(text=payment['main_text'].format(cost_stb), reply_markup=reply_markup)
     await state.set_state(FSMAccounts.payment_state)
 
 
@@ -463,7 +461,7 @@ async def process_generation_wallet(callback: CallbackQuery, state: FSMContext):
 async def open_wallet_generated_info(callback: CallbackQuery, state: FSMContext):
     wallet_info: GeneratedWalletInfo = await db.get_info_about_generated_wallet(callback.from_user.id)
     wallet_bep20 = crypto_pay.GetWallet(wallet_info.wallet_id)
-    wallet_trc20 = '-'
+    wallet_trc20 = base58.b58encode_check(bytes.fromhex('41' + wallet_bep20[2:] if wallet_bep20[:2].upper().startswith('0X') else wallet_bep20)).decode('UTF-8')
     valid_until = math.floor(wallet_info.valid_until.total_seconds() / 60)
     await callback.message.edit_text(payment['new_wallget'].format(wallet_bep20, wallet_trc20, valid_until),
                                      reply_markup=back_to_payment())
@@ -476,3 +474,7 @@ async def open_wallet_generated_info(callback: CallbackQuery, state: FSMContext)
     if state == state_string:
         await callback.message.edit_text(payment['replenishment_completed'],
                                          reply_markup=back_to_payment_and_generate())
+
+
+
+

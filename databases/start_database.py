@@ -82,18 +82,19 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('payments')"):
                 await connection.execute('CREATE TABLE payments('
-                                         'unique_id SERIAL PRIMARY KEY,'
+                                         'transaction_id INT,'
                                          'telegram_id INT,'
                                          'amount REAL,'
                                          'issued_by_STB REAL,'
                                          'payment_date TIMESTAMP WITH TIME ZONE DEFAULT (now()),'
-                                         'payment_method VARCHAR(50))')
+                                         'token VARCHAR(12),'
+                                         'payments_wallets_id INT)')
 
     async def create_payments_wallets_table(self):
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('payments_wallets')"):
                 await connection.execute('CREATE TABLE payments_wallets('
-                                         'unique_id SERIAL PRIMARY KEY,'
+                                         'payments_wallets_id SERIAL PRIMARY KEY,'
                                          'telegram_id INT,'
                                          'wallet_id INT,'
                                          'valid_until TIMESTAMP WITH TIME ZONE)')

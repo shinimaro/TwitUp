@@ -1,6 +1,7 @@
 import asyncio
-from dataclasses import dataclass
 import datetime
+from dataclasses import dataclass
+from decimal import Decimal
 from enum import Enum
 from typing import TypedDict, Literal, Union, Optional
 
@@ -266,7 +267,7 @@ class UserPayments:
     payment_date: datetime.datetime
     amount_pay: float
     issued_by_stb: float
-    payment_method: str
+    token: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -447,3 +448,13 @@ class GetWalletIdLock:
 @dataclass
 class WaitingStartTask:
     waiting_time: int = 60  # Используется в начальном ожидании при старте таска, а также в бд для проверки того, можно ли засчитывать данное задание за удалённое
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentData:
+    transaction_id: int
+    wallet_id: int
+    amount: Decimal
+    issued_by_stb: Decimal
+    payment_date: datetime.datetime
+    token: Literal['USDT', 'USDC', 'BUSD']

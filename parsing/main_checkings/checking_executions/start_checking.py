@@ -79,14 +79,3 @@ class StartChecking(BaseStartChecking):
     def _apply_default_completion_to_all(self):
         """Заочно проставляем выполнение всем остальным действиям, чтобы дальнейшая проверка на них не отвлекалась"""
         self.actions_dict = {key: True if value is None else value for key, value in self.actions_dict.items()}
-
-
-
-async def sus():
-    await db.connect()
-    a = StartChecking(1)
-    a = await a.start_checking()
-    print(a)
-    await asyncio.sleep(123123123123123)
-
-asyncio.get_event_loop().run_until_complete(sus())

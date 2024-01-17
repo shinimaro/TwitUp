@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import re
+from decimal import Decimal
 from typing import Literal
 
 import asyncpg
@@ -12,7 +13,7 @@ from databases.dataclasses_storage import WorkersInfo, ActionsInfo, LinkAction, 
     InfoIncreasedExecutions, RemainingTaskBalance, FinesInfo, AllFinesInfo, AdminPanelMainInfo, UsersList, \
     AuthorTaskInfo, FinesPartInfo, SupportPanelInfo, SupportInfo, AdminInfo, AllInfoLimits, AwardsCut, RealPricesTask, \
     UsersPerformTask, TaskAllInfo, AllTasks, UserPayments, UserFines, UserAccount, FineInfo, UserAllInfo, SentTasksInfo, \
-    UserTasksInfo, InfoForMainMenu, WaitingStartTask, GeneratedWalletInfo, GetWalletIdLock
+    UserTasksInfo, InfoForMainMenu, WaitingStartTask, GeneratedWalletInfo, GetWalletIdLock, PaymentData
 
 config = load_config()
 
@@ -2283,12 +2284,12 @@ class Database:
     # Получить информацию обо всех пополнениях юзера
     async def get_all_payments_user(self, tg_id) -> list[UserPayments]:
         async with self.pool.acquire() as connection:
-            payments = await connection.fetch("SELECT payment_date, amount, issued_by_stb, payment_method FROM payments WHERE telegram_id = $1", tg_id)
+            payments = await connection.fetch("SELECT payment_date, amount, issued_by_stb, token FROM payments WHERE telegram_id = $1", tg_id)
             return [UserPayments(
                 payment_date=payment['payment_date'],
                 amount_pay=payment['amount'],
                 issued_by_stb=payment['issued_by_stb'],
-                payment_method=payment['payment_method']) for payment in payments]
+                token=payment['token']) for payment in payments]
 
     # Удалить штраф с пользователя
     async def delete_user_fines(self, fines_id):
@@ -2956,16 +2957,10 @@ class Database:
                 tg_id = await self.get_telegram_id_from_tasks_messages(tasks_msg_id)
                 await connection.execute("UPDATE tasks_messages SET account_id = (SELECT account_id FROM accounts WHERE telegram_id = $2 ORDER BY account_id LIMIT 1) WHERE tasks_msg_id = $1", tasks_msg_id, tg_id)
 
-    # Сделать запись о пополнении
-    async def record_of_payment(self, tg_id, amount_payment, issued_by_stb, payment_method):
-        async with self.pool.acquire() as connection:
-            await connection.execute("INSERT INTO payments(telegram_id, amount, issued_by_STB) VALUES ($1, $2, $3, $4)",
-                                     tg_id, amount_payment, issued_by_stb, payment_method)
-
     # Пополнить баланс юзера
-    async def update_user_balance_afrter_payment(self, tg_id, stb: float):
+    async def update_user_balance_afrter_payment(self, tg_id, stb: Decimal):
         async with self.pool.acquire() as connection:
-            await connection.execute("UPDATE users SET balance = $1 WHERE telegram_id = $2", stb, tg_id)
+            await connection.execute("UPDATE users SET balance = balance + $1 WHERE telegram_id = $2", stb, tg_id)
 
     # Достать инфу о действующем сгенерированном кошельке
     async def get_info_about_generated_wallet(self, tg_id) -> GeneratedWalletInfo:
@@ -2998,4 +2993,22 @@ class Database:
 
     async def get_stb_coint_cost(self):
         async with self.pool.acquire() as connection:
-            return await connection.fetchval("SELECT cost_to_dollar FROM cost_stb ORDER BY date_of_added DESC LIMIT 1")
+            return await connection.fetchval("SELECT cost_to_dollar FROM cost_stb ORDER BY date_of_added DESC")
+
+    async def get_last_trancaction_id(self):
+        async with self.pool.acquire() as connection:
+            return await connection.fetchval("SELECT COALESCE(transaction_id, 0) as transaction_id FROM payments ORDER BY transaction_id DESC LIMIT 1")
+
+    # Сделать запись о пополнении
+    async def record_of_payment(self, payment_data: PaymentData):
+        async with self.pool.acquire() as connection:
+            payments_wallets_id = await connection.fetchval("SELECT payments_wallets_id FROM payments_wallets WHERE wallet_id = $1 AND valid_until >= NOW()", payment_data.wallet_id)
+            tg_id = await connection.fetchval('SELECT telegram_id FROM payments_wallets WHERE payments_wallets_id = $1', payments_wallets_id)
+            await connection.execute("INSERT INTO payments(transaction_id, telegram_id, amount, issued_by_STB, payment_date, token, payments_wallets_id)"
+                                     "VALUES ($1, $2, $3, $4, $5, $6, $7)", payment_data.transaction_id, tg_id, payment_data.amount, payment_data.issued_by_stb, payment_data.payment_date, payment_data.token, payments_wallets_id)
+            return tg_id
+
+    # Проверка на то, что есть действующие сгененрированные кошельки
+    async def check_valid_wallets(self):
+        async with self.pool.acquire() as connection:
+            return bool(await connection.fetchval('SELECT wallet_id FROM payments_wallets WHERE valid_until >= NOW()'))

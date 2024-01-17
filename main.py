@@ -12,6 +12,7 @@ from bot_apps.bot_parts.panels.admin_panel import admin_panel_handlers
 from bot_apps.bot_parts.panels.support_panel import support_panel_handlers
 from bot_apps.bot_parts.personal_office import personal_office_handlers
 from bot_apps.bot_parts.personal_office.first_steps import first_steps_handlers
+from bot_apps.bot_parts.personal_office.payment_checker import payment_checker
 from bot_apps.bot_parts.personal_office.referral_office import referral_office_handlers
 from bot_apps.bot_parts.personal_tasks import personal_task_handlers
 from bot_apps.bot_parts.task_push import task_push_handlers
@@ -90,6 +91,7 @@ async def _start_webdrivers():
 # noinspection PyUnreachableCode
 async def _activate_all_watchman():
     tasks = [
+        payment_checker(),                 # Проверка пополнений баланса
         function_distributor_reminders(),  # Напоминание о том, что юзер уже давно не включал задание
         main_task_checker(),               # Напоминалка о том, что нужно выполнить таск + сообщение о том, что воркер опоздал
         level_watchman_checker(),          # Проверка выполнения тасков на свой уровень
