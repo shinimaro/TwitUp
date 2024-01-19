@@ -1,3 +1,4 @@
+import asyncio
 import os
 import pickle
 from dataclasses import dataclass
@@ -15,6 +16,8 @@ from parsing.elements_storage.elements_dictionary import other_blocks, converter
 from parsing.manage_webdrivers.start_webdriver.twitter_login import twitter_login
 
 config = load_config()
+# import logging
+# logging.basicConfig(level=logging.DEBUG)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +39,7 @@ async def webdriver():
 
 
 class Webdrivers:
-    headless_mode: bool = True
+    headless_mode: bool = False
     twitter_accounts: dict[str, TwitterAccount] = {}
     account_generator: Optional[Callable] = None
 
@@ -102,7 +105,8 @@ class Webdrivers:
 
     async def _set_current_driver(self):
         proxy_server = self._get_proxy_server()
-        self.current_driver = await launch(headless=Webdrivers.headless_mode, args=[proxy_server])
+        self.current_driver = await launch(headless=Webdrivers.headless_mode, args=[proxy_server],
+                                           options={'args': ['--no-sandbox']})
 
     def _get_proxy_server(self) -> str:
         return f"--proxy-server={Webdrivers.twitter_accounts[self.current_login].proxy.proxy_host}:{Webdrivers.twitter_accounts[self.current_login].proxy.proxy_port}"
