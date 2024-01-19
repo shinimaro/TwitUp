@@ -39,7 +39,7 @@ async def webdriver():
 
 
 class Webdrivers:
-    headless_mode: bool = False
+    headless_mode: bool = True
     twitter_accounts: dict[str, TwitterAccount] = {}
     account_generator: Optional[Callable] = None
 
@@ -105,8 +105,7 @@ class Webdrivers:
 
     async def _set_current_driver(self):
         proxy_server = self._get_proxy_server()
-        self.current_driver = await launch(headless=Webdrivers.headless_mode, args=[proxy_server],
-                                           options={'args': ['--no-sandbox']})
+        self.current_driver = await launch(headless=Webdrivers.headless_mode, args=[proxy_server])
 
     def _get_proxy_server(self) -> str:
         return f"--proxy-server={Webdrivers.twitter_accounts[self.current_login].proxy.proxy_host}:{Webdrivers.twitter_accounts[self.current_login].proxy.proxy_port}"
