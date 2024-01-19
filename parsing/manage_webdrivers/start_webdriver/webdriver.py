@@ -84,13 +84,14 @@ class Webdrivers:
         with open(file_path, 'r', encoding='utf-8') as file:
             all_accounts = file.read()
         for info in all_accounts.split('\n'):
-            info_list = info.split(':')
-            Webdrivers.twitter_accounts[info_list[0]] = TwitterAccount(
-                password=info_list[1],
-                proxy=Proxy(proxy_host=info_list[2],
-                            proxy_port=info_list[3],
-                            proxy_login=info_list[4],
-                            proxy_password=info_list[5]))
+            if info:
+                info_list = info.split(':')
+                Webdrivers.twitter_accounts[info_list[0]] = TwitterAccount(
+                    password=info_list[1],
+                    proxy=Proxy(proxy_host=info_list[2],
+                                proxy_port=info_list[3],
+                                proxy_login=info_list[4],
+                                proxy_password=info_list[5]))
 
     @classmethod
     def _issue_new_account(cls) -> str:
