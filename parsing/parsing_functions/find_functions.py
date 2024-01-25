@@ -160,7 +160,6 @@ async def find_number_subs(html_page: str, page: Page, find_subscribers_flag: bo
     index = 1 if find_subscribers_flag else 0
     for _ in range(2):
         try:
-            # print('Даю html страницу', html_page)
             soup = BeautifulSoup(html_page, 'lxml')
             nums_text = soup.find_all('span', class_=profile_blocks['sub_info_block'])[index].text
             return _get_correct_sub_numbers(nums_text)

@@ -1,11 +1,12 @@
-import asyncio
 import datetime
 import re
+from asyncio import sleep
 from decimal import Decimal
 from typing import Literal
 
 import asyncpg
 import pytz
+from asyncpg import CannotConnectNowError
 
 from config import load_config
 from databases.dataclasses_storage import WorkersInfo, ActionsInfo, LinkAction, ActiveTasks, TaskStatus, HistoryTasks, \
@@ -21,15 +22,27 @@ config = load_config()
 class Database:
     pool = None
 
+    @staticmethod
+    async def common_connect(pool):
+        if pool is None:
+            for _ in range(3):
+                try:
+                    pool = await asyncpg.create_pool(
+                        host=config.database.db_host,
+                        database=config.database.db_name,
+                        user=config.database.db_user,
+                        password=config.database.db_password,
+                        max_size=15)
+                    return pool
+                except CannotConnectNowError:
+                    await sleep(10)
+            else:
+                exit()
+
+
     @classmethod
     async def connect(cls):
-        if cls.pool is None:
-            cls.pool = await asyncpg.create_pool(
-                host=config.database.db_host,
-                database=config.database.db_name,
-                user=config.database.db_user,
-                password=config.database.db_password,
-                max_size=15)
+        cls.pool = await cls.common_connect(cls.pool)
 
     @classmethod
     async def disconnect(cls):

@@ -16,12 +16,7 @@ class StartDB:
 
     @classmethod
     async def connect(cls):
-        if cls.pool is None:
-            cls.pool = await asyncpg.create_pool(
-                host=config.database.db_host,
-                database=config.database.db_name,
-                user=config.database.db_user,
-                password=config.database.db_password)
+        cls.pool = await Database.common_connect(cls.pool)
 
     @classmethod
     async def disconnect(cls):

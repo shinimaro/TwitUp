@@ -1,8 +1,11 @@
 .env
-accounts.txt
-
-.mypy_cache/
+.idea
 .vscode/
 __pycache__/
-parsing/manage_webdrivers/cookies/
 
+venv
+accounts.txt
+docker_volumes/*
+!docker_volumes/.gitkeep
+parsing/manage_webdrivers/cookies/*
+!parsing/manage_webdrivers/cookies/.gitkeep

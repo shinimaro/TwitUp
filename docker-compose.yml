@@ -1,0 +1,42 @@
+version: '3.1'
+
+services:
+  python:
+    build: .
+    restart: always
+    container_name: python_project
+    volumes:
+      - .:/usr/src/app
+    depends_on:
+      - postgres
+      - redis
+#    command: >
+#      sh -c "git pull origin main && python3.11 main.py"
+
+  redis:
+    image: redis
+    restart: always
+    container_name: redis_db
+    volumes:
+      - ./docker_volumes/redis_data:/data
+    ports:
+      - 6379:6379
+
+  postgres:
+    image: postgres
+    restart: always
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    env_file:
+      - .env
+    ports:
+      - 5432:5432
+    volumes:
+      - ./docker_volumes/postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data_storage: null
+

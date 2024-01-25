@@ -2,8 +2,9 @@ import asyncio
 from typing import NoReturn
 
 from aiogram import Dispatcher, Bot
-from aiogram.fsm.storage.redis import RedisStorage, Redis
+from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand
+from redis.asyncio import Redis
 
 from bot_apps.bot_parts.adding_task import adding_task_handlers
 from bot_apps.bot_parts.help_center import help_center_handlers
@@ -38,6 +39,7 @@ from parsing.manage_webdrivers.master_function import Master
 start_db = StartDB()
 re_checking = ReCheckExecution()
 config = load_config()
+bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
 
 
 async def main():
@@ -50,9 +52,8 @@ async def main():
 
 
 async def _start_bot() -> NoReturn:
-    redis = Redis(host='localhost', db=0)
+    redis = Redis(host='redis_db')
     storage = RedisStorage(redis=redis)
-    bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
     dp = Dispatcher(storage=storage)
     print('Бот работает')
     dp.include_router(main_menu_handlers.router)  # Поставлен фильтр на сообщения
@@ -73,7 +74,7 @@ async def _start_bot() -> NoReturn:
     await dp.start_polling(bot)
 
 
-async def bot_menu_builder(bot):
+async def bot_menu_builder(bot: Bot):
     """Добавление меню в бота"""
     main_menu_commands = [BotCommand(command='/start',
                                      description=commands['/start'])]

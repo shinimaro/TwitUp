@@ -445,6 +445,7 @@ class GeneratedWalletInfo:
 class GetWalletIdLock:
     wallet_id_lock = asyncio.Lock()
 
+
 @dataclass
 class WaitingStartTask:
     waiting_time: int = 60  # Используется в начальном ожидании при старте таска, а также в бд для проверки того, можно ли засчитывать данное задание за удалённое

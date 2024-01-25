@@ -1,11 +1,10 @@
-import asyncio
-import os
 import os
 import pickle
+from asyncio import sleep
 
 import aiofiles
 from pyppeteer.page import Page
-from asyncio import sleep
+
 from config import load_config
 from parsing.elements_storage.elements_dictionary import login_blocks, converter, base_links
 
