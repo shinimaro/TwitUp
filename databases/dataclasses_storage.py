@@ -459,3 +459,19 @@ class PaymentData:
     issued_by_stb: Decimal
     payment_date: datetime.datetime
     token: Literal['USDT', 'USDC', 'BUSD']
+
+
+@dataclass(frozen=True, slots=True)
+class AccountRequirements:
+    min_followers: int
+    min_following: int
+    min_creation_date: datetime.date
+
+
+@dataclass(frozen=True, slots=True)
+class AccountDetails:
+    avatar: bool
+    followers: int
+    following: int
+    creation_date: int
+    check_posts: bool

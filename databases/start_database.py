@@ -537,6 +537,16 @@ class StartDB:
                                          'cost_to_dollar REAL,'
                                          'date_of_added TIMESTAMP WITH TIME ZONE DEFAULT NOW());')
 
+    async def create_account_requirements_table(self):
+        async with self.pool.acquire() as connection:
+            if not await connection.fetchval("SELECT to_regclass('account_requirements')"):
+                await connection.execute('CREATE TABLE account_requirements('
+                                         'requirement_id SERIAL PRIMARY KEY,'
+                                         'min_followers INT,'
+                                         'min_following INT,'
+                                         'min_creation_date DATE,'
+                                         'date_of_added TIMESTAMP WITH TIME ZONE DEFAULT NOW());')
+
     async def create_admins_table(self):
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('admins')"):
@@ -784,6 +794,15 @@ class StartDB:
                 await connection.execute('INSERT INTO cost_stb('
                                          'cost_to_dollar)'
                                          'VALUES (1);')
+
+    async def initial_account_requirements_values(self):
+        async with (self.pool.acquire() as connection):
+            if not await connection.fetchval('SELECT EXISTS (SELECT 1 FROM account_requirements)'):
+                await connection.execute('INSERT INTO account_requirements('
+                                         'min_followers,'
+                                         'min_following,'
+                                         'min_creation_date) '
+                                         'VALUES (1, 1, NOW());')
 
     async def initial_level_loss_conditions_values(self):
         async with self.pool.acquire() as connection:

@@ -10,6 +10,7 @@ from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.filters.ban_filters.they_banned import TheyBanned
 from bot_apps.other_apps.filters.limits_filters.callback_limit_filter import CallbackFilter
 from bot_apps.other_apps.filters.limits_filters.message_limit_filter import MessageFilter
+from bot_apps.other_apps.wordbank import main_menu
 from config import load_config
 from databases.database import Database
 
@@ -53,3 +54,9 @@ async def process_open_main_menu(callback: CallbackQuery, state: FSMContext):
     else:
         await callback.message.edit_text(await main_info_about_user(callback.from_user.id),
                                          reply_markup=await main_menu_builder(callback.from_user.id))
+
+
+# Пользователь открыл лайтпеппер в главном меню
+@router.callback_query(F.data == 'twittup_litepepper')
+async def process_open_litepepper(callback: CallbackQuery):
+    await callback.answer(main_menu['litepepper_stub'], show_alert=True)

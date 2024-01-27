@@ -28,6 +28,7 @@ from bot_apps.other_apps.wordbank import accounts, rules, statistic, payment, hi
 from config import load_config
 from databases.database import Database
 from databases.dataclasses_storage import GeneratedWalletInfo
+from parsing.other_parsing.check_profile import check_profile
 from parsing.other_parsing.parsing_our_subscribers import AllOurUsers
 from parsing.other_parsing.parsing_shadowban import parsing_shadowban
 
@@ -235,7 +236,9 @@ async def process_back_to_accounts(callback: CallbackQuery, state: FSMContext):
 # Пользователь решил поменять название аккаунта на другой
 @router.callback_query(F.data == 'not_add')
 async def process_add_account(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text(accounts['add_account'],
+    requirements = await db.get_account_requirements()
+    await callback.message.edit_text(accounts['add_account'] + accounts['account_requirements'].format(
+        requirements.min_followers, requirements.min_following, requirements.min_creation_date.strftime('%d.%m.%Y')),
                                      reply_markup=back_button_builder())
     await state.set_state(FSMAccounts.add_account)
 
@@ -266,36 +269,42 @@ async def adding_account(message: Message, state: FSMContext):
 # Проверка только что добавленного аккаунта
 @router.callback_query(F.data == 'confirm_add')
 async def process_check_account(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    await callback.message.edit_text(accounts['examination'].format(data.get('account')))
+    account = (await state.get_data())['account']
+    await callback.message.edit_text(accounts['examination'].format(account))
     await sleep(random.uniform(1, 3))
     all_users = await all_our_users.get_all_our_users()
     # Если не удалось найти аккаунт в подписках нашего твиттер аккаунта
-    if data.get('account') not in all_users:
-        await callback.message.edit_text(accounts['fail_check'].format(data.get('account')[1:]),
+    if account.lower() not in all_users:
+        await callback.message.edit_text(accounts['fail_check'].format(account[1:]),
                                          reply_markup=not_add_account_builder(),
                                          disable_web_page_preview=True)
     # Если аккаунт найден, то бот открывает функция для его проверки на теневой бан
-    elif await parsing_shadowban(data['account']) is False:
-        await callback.message.edit_text(accounts['shadow_ban'].format(data.get('account')[1:]),
+    elif await parsing_shadowban(account) is False:
+        await callback.message.edit_text(accounts['shadow_ban'].format(account[1:]),
                                          reply_markup=shadow_ban_builder(),
                                          disable_web_page_preview=True)
-
-    # Если аккаунт найден в подписках
+    # Если всё ок
     else:
-        tg_id = callback.from_user.id
-        account_id = await db.add_account(tg_id, data.get('account'))
-        await db.add_account_to_slice(tg_id, account_id)
-        issuing_a_fine = await db.add_fines_from_account(tg_id, account_id)
-        # Если с добавленного аккаунта был подхвачен штраф
-        if issuing_a_fine:
-            await callback.message.edit_text(text=accounts['account_added_with_fines'].format(data.get('account')),
-                                             reply_markup=account_added_successfully_builder())
-        # Если аккаунт добавлен и всё отлично
+        # Проверка аккаунта на то, что аккаунт соответствует минимальным харакетиристикам
+        check_on_requirements: bool | str = await check_profile(account)
+        if isinstance(check_on_requirements, str):
+            await callback.message.edit_text(check_on_requirements,
+                                             reply_markup=shadow_ban_builder(),
+                                             disable_web_page_preview=True)
         else:
-            await callback.message.edit_text(accounts['account_added_2'].format(data.get('account')),
-                                             reply_markup=account_added_successfully_builder())
-        await db.off_all_notifications(tg_id)
+            tg_id = callback.from_user.id
+            account_id = await db.add_account(tg_id, account)
+            await db.add_account_to_slice(tg_id, account_id)
+            issuing_a_fine = await db.add_fines_from_account(tg_id, account_id)
+            # Если с добавленного аккаунта был подхвачен штраф
+            if issuing_a_fine:
+                await callback.message.edit_text(text=accounts['account_added_with_fines'].format(account),
+                                                 reply_markup=account_added_successfully_builder())
+            # Если аккаунт добавлен и всё отлично
+            else:
+                await callback.message.edit_text(accounts['account_added_2'].format(account),
+                                                 reply_markup=account_added_successfully_builder())
+            await db.off_all_notifications(tg_id)
 
 
 # Пользователь зафейлил проверку, т.к. бот не нашёл его в подписках аккаунта
@@ -306,7 +315,7 @@ async def try_again_check_account(callback: CallbackQuery, state: FSMContext):
     await sleep(random.uniform(1, 3))
     all_users = await all_our_users.get_all_our_users()
     # Если аккаунт не найден, то будет новое сообщение о том, что
-    if not data.get('account') in all_users:
+    if data.get('account').lower() not in all_users:
         await callback.message.edit_text(accounts['fail_check_again'].format(
             data.get('account')[1:] if callback.data[-1] != '3'
             else accounts['final_fail'].format(data.get('account')[1:])),

@@ -11,15 +11,21 @@ from parsing.elements_storage.elements_dictionary import login_blocks, converter
 config = load_config()
 
 
+def get_path_to_coockies() -> str:
+    current_file_dir = os.path.dirname(__file__)
+    file_path = os.path.join(current_file_dir, '..', f'./cookies/')
+    return file_path
+
+
 # Функция для сохранения куки
 async def save_cookies(cookies, login: str) -> None:
-    current_file_dir = os.path.dirname(__file__)
-    file_path = os.path.join(current_file_dir, '..', f'./cookies/{login}_cookies.pkl')
+    cockie_path = get_path_to_coockies()
+    file_path = os.path.join(cockie_path, f'{login}_cookies.pkl')
     async with aiofiles.open(file_path, 'wb') as file:
         await file.write(pickle.dumps(cookies))
 
 
-async def twitter_login(page: Page, login: str, password: str, ) -> bool:
+async def twitter_login(page: Page, login: str, password: str) -> bool:
     timeout = 5000
     for _ in range(3):
         try:

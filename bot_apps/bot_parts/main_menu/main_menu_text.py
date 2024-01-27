@@ -14,6 +14,7 @@ async def main_info_about_user(tg_id: int) -> str:
     text = main_menu['main_text']
     account_info: InfoForMainMenu = await db.get_some_statistics_account(tg_id)
     if account_info.number_accounts < 1:
+        text += main_menu['dop_main_text']
         if account_info.sum_fines_stb:
             text += _text_about_user_fines(account_info)
     else:

@@ -5,8 +5,6 @@ services:
     build: .
     restart: always
     container_name: python_project
-    volumes:
-      - .:/usr/src/app
     depends_on:
       - postgres
       - redis

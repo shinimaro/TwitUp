@@ -13,6 +13,6 @@ RUN apt-get update && \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./ ./
+COPY . .
 
 CMD ["python3.11", "main.py"]

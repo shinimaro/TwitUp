@@ -8,7 +8,9 @@ base_links = {
     # Страница, через которую предпочтительнее логиниться
     'login_page': 'https://twitter.com/i/flow/login',
     # Страница для просмотра всех наших пепещиков, но пока аккаунта нужного нет
-    'followers_page': f'https://twitter.com/{"JJKcontents"}/followers'
+    'followers_page': f'https://twitter.com/{"JujutsuTwts"}/followers',
+    # Страница на которую нужно подписаться
+    'account_page': f'https://twitter.com/{"JujutsuTwts"}'
 }
 
 
@@ -21,7 +23,13 @@ profile_blocks = {
     # div блок, содержащий информацию о том, что аккаунт в бане
     'ban_block': 'css-175oi2r r-1kihuf0 r-1jgb5lz r-764hgp r-jzhu7e r-13qz1uu r-14lw9ot r-d9fdf6 r-10x3wzx',
     # div блок, говорящий о том, что аккаунт не найден
-    'not_account_block': 'css-175oi2r r-1kihuf0 r-1jgb5lz r-764hgp r-jzhu7e r-13qz1uu r-14lw9ot r-d9fdf6 r-10x3wzx'}
+    'not_account_block': 'css-175oi2r r-1kihuf0 r-1jgb5lz r-764hgp r-jzhu7e r-13qz1uu r-14lw9ot r-d9fdf6 r-10x3wzx',
+    # Блок, содержащий дату регистрации аккаунта
+    'date_block': 'css-1qaijid r-bcqeeo r-qvutc0 r-poiln3 r-4qtqp9 r-1b7u577',
+    # div блок, содержащий aria-label тег с фоткой внутри
+    'photo_block': 'Opens profile photo',
+    # Линк на дефолт аватар
+    'defolt_avatar_link': 'https://abs.twimg.com/sticky/default_profile_images/default_profile_200x200.png'}
 
 
 # Здесь находятся элементами, используемые для работы с подписками

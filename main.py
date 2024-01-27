@@ -2,8 +2,10 @@ import asyncio
 from typing import NoReturn
 
 from aiogram import Dispatcher, Bot
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand
+from redis import exceptions as redis_exceptions
 from redis.asyncio import Redis
 
 from bot_apps.bot_parts.adding_task import adding_task_handlers
@@ -45,15 +47,14 @@ bot = Bot(token=config.tg_bot.token, parse_mode="HTML")
 async def main():
     await start_db.start_database()   # Запуск базы данных
     await _fill_ban_lists()           # Загрузка бан списков
-    await _start_webdrivers()       # Запуск всех вебдрайверов
+    await _start_webdrivers()         # Запуск всех вебдрайверов
     await asyncio.gather(
-        _activate_all_watchman(),   # Запуск сторожей
-        _start_bot())               # Запуск бота
+        _activate_all_watchman(),     # Запуск сторожей
+        _start_bot())                 # Запуск бота
 
 
 async def _start_bot() -> NoReturn:
-    redis = Redis(host='redis_db')
-    storage = RedisStorage(redis=redis)
+    storage = await _get_storage()
     dp = Dispatcher(storage=storage)
     print('Бот работает')
     dp.include_router(main_menu_handlers.router)  # Поставлен фильтр на сообщения
@@ -113,6 +114,16 @@ async def _fill_ban_lists():
     they_banned = TheyBanned()
     await is_banned.loading_blocked_users()         # Загрузка юзеров, которые в блоке у нас
     await they_banned.loading_they_blocked_users()  # Загрузка юзеров, у которых мы сами в блоке
+
+
+# Хранилище для состояний бота
+async def _get_storage() -> RedisStorage | MemoryStorage:
+    redis = Redis(host='redis_db')
+    try:
+        await redis.ping()  # Проверка коннекта
+        return RedisStorage(redis=redis)
+    except redis_exceptions.ConnectionError:
+        return MemoryStorage()
 
 
 if __name__ == '__main__':

@@ -14,11 +14,11 @@ db = Database()
 # Билдер главного меню бота
 async def main_menu_builder(tg_id) -> IM:
     main_menu = BD()
-    # Все обычные кнопки
+    # Обычные кнопки
     buttons = [IB(text=wordlist.main_menu['buttons'][button],
                   callback_data=button[:-7])
                for button in wordlist.main_menu['buttons']]
-    # Кнопка рабты с заданиями
+    # Кнопка работы с заданиями
     result = await db.check_tasks(tg_id)
     buttons.insert(0, IB(text=wordlist.main_menu['dop_buttons']['add_task_button'] if not result else wordlist.main_menu['dop_buttons']['personal_tasks_button'], callback_data='add_task' if not result else 'personal_tasks'))
     # Кнопка приёма заданий
@@ -32,7 +32,7 @@ async def main_menu_builder(tg_id) -> IM:
     # Кнопка TwittUp - litepepper
     main_menu.row(
         IB(text=wordlist.main_menu['dop_buttons']['twittup_litepepper_button'],
-           callback_data='other'))
+           callback_data='twittup_litepepper'))
 
     return main_menu.as_markup()
 

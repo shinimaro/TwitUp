@@ -1,11 +1,14 @@
 import asyncio
+from dataclasses import dataclass
 
 from pyppeteer.page import Page
 
 from databases.database import Database
+from databases.dataclasses_storage import AccountDetails
 from parsing.manage_webdrivers.master_function import Master
 from parsing.parsing_functions.find_functions import find_all_users, find_all_posts, find_all_retweets, \
-    find_all_comments, find_comment, find_ban_block, find_number_subs, find_post_block
+    find_all_comments, find_comment, find_ban_block, find_number_subs, find_post_block, check_profile_avatar, \
+    get_date_create_account, check_post_on_profile
 from parsing.parsing_functions.page_Interaction import PageInteraction
 
 db = Database()
@@ -198,3 +201,15 @@ async def get_number_subs(page: Page, profile_link: str, find_subscribers_flag: 
     page_interactions = PageInteraction(page, profile_link)
     html = await page_interactions.open_profile()
     return await find_number_subs(html, page, find_subscribers_flag)
+
+
+async def get_account_info(page: Page, profile_link: str) -> AccountDetails:
+    """Получить всю информацию об аккаунте одним заходом"""
+    page_interactions = PageInteraction(page, profile_link)
+    html = await page_interactions.open_profile()
+    return AccountDetails(
+        avatar=check_profile_avatar(html),
+        followers=await find_number_subs(html, page),
+        following=await find_number_subs(html, page, find_subscribers_flag=False),
+        creation_date=get_date_create_account(html),
+        check_posts=await check_post_on_profile(page))

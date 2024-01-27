@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import re
 from asyncio import sleep
@@ -14,7 +15,8 @@ from databases.dataclasses_storage import WorkersInfo, ActionsInfo, LinkAction, 
     InfoIncreasedExecutions, RemainingTaskBalance, FinesInfo, AllFinesInfo, AdminPanelMainInfo, UsersList, \
     AuthorTaskInfo, FinesPartInfo, SupportPanelInfo, SupportInfo, AdminInfo, AllInfoLimits, AwardsCut, RealPricesTask, \
     UsersPerformTask, TaskAllInfo, AllTasks, UserPayments, UserFines, UserAccount, FineInfo, UserAllInfo, SentTasksInfo, \
-    UserTasksInfo, InfoForMainMenu, WaitingStartTask, GeneratedWalletInfo, GetWalletIdLock, PaymentData
+    UserTasksInfo, InfoForMainMenu, WaitingStartTask, GeneratedWalletInfo, GetWalletIdLock, PaymentData, \
+    AccountRequirements
 
 config = load_config()
 
@@ -3025,3 +3027,13 @@ class Database:
     async def check_valid_wallets(self):
         async with self.pool.acquire() as connection:
             return bool(await connection.fetchval('SELECT wallet_id FROM payments_wallets WHERE valid_until >= NOW()'))
+
+    async def get_account_requirements(self) -> AccountRequirements:
+        async with self.pool.acquire() as connection:
+            requirements = await connection.fetchrow("SELECT min_followers, min_following, min_creation_date FROM account_requirements ORDER BY date_of_added DESC")
+            return AccountRequirements(
+                min_followers=requirements['min_followers'],
+                min_following=requirements['min_following'],
+                min_creation_date=requirements['min_creation_date'])
+
+

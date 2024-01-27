@@ -14,11 +14,13 @@ from bot_apps.bot_parts.personal_office.first_steps.first_steps_keyboards import
     shadow_ban_keyboard_builder, not_add_first_account_builder
 from bot_apps.bot_parts.personal_office.personal_office_filters import correct_account
 from bot_apps.bot_parts.personal_office.personal_office_handlers import all_our_users
+from bot_apps.bot_parts.personal_office.personal_office_keyboards import shadow_ban_builder
 from bot_apps.other_apps.FSM.FSM_states import FSMAccounts
 from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.wordbank import accounts, rules
 from config import load_config
 from databases.database import Database
+from parsing.other_parsing.check_profile import check_profile
 from parsing.other_parsing.parsing_shadowban import parsing_shadowban
 
 router = Router()
@@ -33,7 +35,9 @@ router.message.filter(IsBanned())
 @router.callback_query(F.data == 'add_first_account')
 @router.callback_query(F.data == 'back_at_specify_account')  # колбеки не соединять через in
 async def add_first_account(callback: CallbackQuery):
-    await callback.message.edit_text(accounts['education_1'],
+    requirements = await db.get_account_requirements()
+    await callback.message.edit_text(accounts['education_1'] + accounts['account_requirements'].format(
+        requirements.min_followers, requirements.min_following, requirements.min_creation_date.strftime('%d.%m.%Y')),
                                      reply_markup=first_account_builder())
 
 
@@ -41,7 +45,9 @@ async def add_first_account(callback: CallbackQuery):
 @router.callback_query(F.data == 'back_to_first_account')
 async def add_first_account(callback: CallbackQuery):
     await callback.message.delete()
-    message_id = await callback.message.answer(accounts['education_1'],
+    requirements = await db.get_account_requirements()
+    message_id = await callback.message.answer(accounts['education_1'] + accounts['account_requirements'].format(
+        requirements.min_followers, requirements.min_following, requirements.min_creation_date.strftime('%d.%m.%Y')),
                                                reply_markup=first_account_builder())
     await db.update_main_interface(callback.from_user.id, message_id.message_id)
 
@@ -82,24 +88,31 @@ async def input_first_account(message: Message, state: FSMContext):
 # Провекрка аккаунта пользователя
 @router.callback_query(F.data == 'check_first_task')
 async def process_check_first_task(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    await callback.message.edit_text(accounts['examination'].format(data.get('account')))
+    account = (await state.get_data())['account']
+    await callback.message.edit_text(accounts['examination'].format(account))
     await sleep(random.uniform(1, 3))
     all_users = await all_our_users.get_all_our_users()
-    if not data.get('account') in all_users:
-        await callback.message.edit_text(accounts['fail_check'].format(data.get('account')[1:]),
+    if account.lower() not in all_users:
+        await callback.message.edit_text(accounts['fail_check'].format(account[1:]),
                                          reply_markup=not_add_first_account_builder(),
                                          disable_web_page_preview=True)
-    elif await parsing_shadowban(data['account']) is False:
-        await callback.message.edit_text(accounts['shadow_ban'].format(data.get('account')[1:]),
+    elif await parsing_shadowban(account) is False:
+        await callback.message.edit_text(accounts['shadow_ban'].format(account[1:]),
                                          reply_markup=shadow_ban_keyboard_builder(),
                                          disable_web_page_preview=True)
     else:
-        await callback.message.edit_text(accounts['result_check'].format(data.get('account')[1:]),
-                                         reply_markup=completion_add_first_account_builder(),
-                                         disable_web_page_preview=True)
-        await db.add_account(callback.from_user.id, data.get('account'))
-        await state.set_state(FSMAccounts.accounts_menu)
+        # Проверка аккаунта на то, что аккаунт соответствует минимальным харакетиристикам
+        check_on_requirements: bool | str = await check_profile(account)
+        if isinstance(check_on_requirements, str):
+            await callback.message.edit_text(check_on_requirements,
+                                             reply_markup=shadow_ban_builder(),
+                                             disable_web_page_preview=True)
+        else:
+            await callback.message.edit_text(accounts['result_check'].format(account[1:]),
+                                             reply_markup=completion_add_first_account_builder(),
+                                             disable_web_page_preview=True)
+            await db.add_account(callback.from_user.id, account)
+            await state.set_state(FSMAccounts.accounts_menu)
 
 
 # Пользователь не подписался на аккаунт
@@ -110,7 +123,7 @@ async def process_fail_check(callback: CallbackQuery, state: FSMContext):
     await sleep(random.uniform(1, 2))
     all_users = await all_our_users.get_all_our_users()
     # Если аккаунт так и не найден в подписках
-    if not data.get('account') in all_users:
+    if not data.get('account').lower() in all_users:
         await callback.message.edit_text(accounts['fail_check_again'].format(
             data.get('account')[1:] if callback.data[-1] != '3'
             else accounts['final_fail'].format(data.get('account')[1:])),
