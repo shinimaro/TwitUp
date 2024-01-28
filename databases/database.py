@@ -2602,7 +2602,9 @@ class Database:
             supports = await connection.fetch("SELECT telegram_name FROM supports WHERE active_status = True")
             if supports:
                 return [support['telegram_name'][1:] for support in supports]
-            return [(await self.get_default_support_name())[1:]]
+            defult_support = await self.get_default_support_name()
+            if defult_support:
+                return [(await self.get_default_support_name())[1:]]
 
     # Взять id активных саппортов
     async def get_active_support_ids(self):

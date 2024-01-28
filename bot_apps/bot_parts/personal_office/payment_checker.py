@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 from asyncio import sleep
 from decimal import Decimal
@@ -55,7 +56,7 @@ async def _payment_completed(payment_data: PaymentData) -> None:
     """Обновление баланса и запись в бд о пополнении"""
     tg_id: int = await db.record_of_payment(payment_data)
     await db.update_user_balance_afrter_payment(tg_id, payment_data.issued_by_stb)
-    await _send_message_on_payment(tg_id, payment_data.issued_by_stb)
+    asyncio.get_event_loop().create_task(_send_message_on_payment(tg_id, payment_data.issued_by_stb))
 
 
 async def _send_message_on_payment(tg_id: int, issued_by_stb) -> None:

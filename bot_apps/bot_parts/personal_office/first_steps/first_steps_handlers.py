@@ -38,7 +38,7 @@ async def add_first_account(callback: CallbackQuery):
     requirements = await db.get_account_requirements()
     await callback.message.edit_text(accounts['education_1'] + accounts['account_requirements'].format(
         requirements.min_followers, requirements.min_following, requirements.min_creation_date.strftime('%d.%m.%Y')),
-                                     reply_markup=first_account_builder())
+                                     reply_markup=first_account_builder(), disable_web_page_preview=True)
 
 
 # Возвращение в меню добавление первого аккаунта (если необходимо удалить сообщение)
@@ -48,7 +48,7 @@ async def add_first_account(callback: CallbackQuery):
     requirements = await db.get_account_requirements()
     message_id = await callback.message.answer(accounts['education_1'] + accounts['account_requirements'].format(
         requirements.min_followers, requirements.min_following, requirements.min_creation_date.strftime('%d.%m.%Y')),
-                                               reply_markup=first_account_builder())
+                                               reply_markup=first_account_builder(), disable_web_page_preview=True)
     await db.update_main_interface(callback.from_user.id, message_id.message_id)
 
 
@@ -62,7 +62,7 @@ async def adding_an_account(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FSMAccounts.add_first_account)
 
 
-# Пользователь написал первый аккаунт
+# Пользователь написал свой первый аккаунт
 @router.message(StateFilter(FSMAccounts.add_first_account))
 async def input_first_account(message: Message, state: FSMContext):
     is_correct = await correct_account(message.from_user.id, message.text.strip() if message.text else None)

@@ -53,13 +53,15 @@ async def add_new_task(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith('add_new_'), StateFilter(FSMAddTask.add_task))
 async def user_select_action(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    action = callback.data[8:]
     # Если ключ уже есть в списке, то убираем его
-    if callback.data[8:] in data['setting_actions']:
-        data['setting_actions'].remove(callback.data[8:])
+    if action in data['setting_actions']:
+        data['setting_actions'].remove(action)
     else:
-        data['setting_actions'].append(callback.data[8:])
+        data['setting_actions'].append(action)
     await callback.message.edit_text(add_task['start_text'],
-                                     reply_markup=select_actions_builder(data.get('setting_actions')))
+                                     reply_markup=select_actions_builder(data['setting_actions']))
+    await state.update_data(setting_actions=data['setting_actions'])
 
 
 # Пользователь вернулся к выбору действий
@@ -120,6 +122,7 @@ async def insert_link_profile(message: Message, state: FSMContext):
     else:
         await state.set_state(FSMAddTask.add_task)
         data['accepted']['profile_link'] = is_correct
+        await state.update_data(accepted=data['accepted'])
         await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
                                     chat_id=message.chat.id,
                                     text=await task_setting_text_builder(data.get('setting_actions'), data.get('accepted')), disable_web_page_preview=True,
@@ -144,6 +147,7 @@ async def insert_post_link(message: Message, state: FSMContext):
         await state.set_state(FSMAddTask.add_task)
         link = message.text.lower()
         data['accepted']['post_link'], data['accepted']['profile_link'] = link, link[:message.text.find('/status/')]
+        await state.update_data(accepted=data['accepted'])
         await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
                                     chat_id=message.chat.id,
                                     text=await task_setting_text_builder(data.get('setting_actions'),
@@ -171,6 +175,7 @@ async def open_add_checking_comment(callback: CallbackQuery, state: FSMContext):
     # Предварительно создаём словарь с выбором одного из значений для проверки комментария
     if 'one_value' not in data['accepted']['comment_parameters']:
         data['accepted']['comment_parameters']['one_value'] = {}
+        await state.update_data(accepted=data['accepted'])
     await callback.message.edit_text(text=await text_under_adding_one_parameter_builder(data['accepted']['comment_parameters']['one_value']),
                                      reply_markup=comment_criteria_builder(data.get('accepted')))
 
@@ -222,6 +227,7 @@ async def add_minimum_value(callback: CallbackQuery, state: FSMContext):
     else:
         data['accepted']['comment_parameters']['one_value'] = {'words': False, 'tags': value, 'tags/words': False}
         await back_to_comment_parameters(callback, state)
+    await state.update_data(accepted=data['accepted'])
 
 
 # Пользователь вводит ключевые слова/теги
@@ -236,8 +242,9 @@ async def add_key_word(message: Message, state: FSMContext):
                                     chat_id=message.chat.id,
                                     text=is_correct, reply_markup=back_to_checking_comment_builder())
     else:
-        data['accepted']['comment_parameters']['one_value'] = {'words': False, 'tags': False, 'tags/words': is_correct}
         await state.set_state(FSMAddTask.add_task)
+        data['accepted']['comment_parameters']['one_value'] = {'words': False, 'tags': False, 'tags/words': is_correct}
+        await state.update_data(accepted=data['accepted'])
         await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
                                     chat_id=message.chat.id,
                                     text=await text_under_comment_parameters_builder(data['accepted']['comment_parameters']),
@@ -249,6 +256,7 @@ async def add_key_word(message: Message, state: FSMContext):
 async def delete_comment_parameters(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     data['accepted']['comment_parameters']['one_value'] = {}
+    await state.update_data(accepted=data['accepted'])
     await callback.message.edit_text(
         text=await text_under_adding_one_parameter_builder(data['accepted']['comment_parameters']['one_value']),
         reply_markup=comment_criteria_builder(data.get('accepted')))
@@ -278,6 +286,7 @@ async def insert_note_in_comment(message: Message, state: FSMContext):
     else:
         await state.set_state(FSMAddTask.add_task)
         data['accepted']['comment_parameters']['note'] = is_correct['correct_note']
+        await state.update_data(accepted=data['accepted'])
         await bot.edit_message_text(message_id=await db.get_main_interface(message.from_user.id),
                                     chat_id=message.chat.id,
                                     text=await text_under_comment_parameters_builder(data['accepted']['comment_parameters']),
@@ -290,6 +299,7 @@ async def delete_adding_note(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await state.set_state(FSMAddTask.add_task)
     data['accepted']['comment_parameters'].pop('note')
+    await state.update_data(accepted=data['accepted'])
     await callback.message.edit_text(await text_under_comment_parameters_builder(data['accepted']['comment_parameters']),
                                      reply_markup=comment_parameters_builder(data.get('accepted')))
 
@@ -311,9 +321,9 @@ async def change_only_english(callback: CallbackQuery, state: FSMContext):
     else:
         data['accepted']['comment_parameters']['only_english'] = False
         await callback.answer(add_task['off_only_english'])
-
     await callback.message.edit_text(await text_under_comment_parameters_builder(data['accepted']['comment_parameters']),
                                      reply_markup=comment_parameters_builder(data.get('accepted')))
+    await state.update_data(accepted=data['accepted'])
 
 
 # Пользователь решил выйти из меню настройки заданий, но уже задал какие-то настройки
@@ -365,6 +375,7 @@ async def insert_number_users(message_from_user: Message | CallbackQuery, state:
     if number_users.isdigit():
         number_users = int(number_users)
         data['number_users'] = number_users
+        await state.update_data(number_users=number_users)
         balance = await db.check_balance(telegram_id)
         need = await define_price(data['setting_actions'], number_users)
         prices = await final_text_builder(data['setting_actions'])

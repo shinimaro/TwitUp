@@ -10,12 +10,13 @@ class SupportName:
     lock = asyncio.Lock()
 
     @classmethod
-    async def get_support_name(cls) -> str:
+    async def get_support_name(cls) -> str | None:
         """Взять name активного саппорта, либо, если все спят, дефолт саппорта"""
         async with cls.lock:
             support_names: list[str] = await db.get_active_supports_list()
-            cls._set_last_index(support_names)
-            return support_names[cls.last_index]
+            if support_names:  # Если указан хотя бы 1 сапорт
+                cls._set_last_index(support_names)
+                return support_names[cls.last_index]
 
     @classmethod
     async def get_support_id(cls) -> int:

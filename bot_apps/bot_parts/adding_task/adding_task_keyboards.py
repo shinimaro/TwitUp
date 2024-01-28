@@ -7,7 +7,7 @@ from bot_apps.other_apps.wordbank import add_task, BACK, BACK_MAIN_MENU, payment
 
 
 # Клавиатура для настройки выбора действий, которые будут в задании
-def select_actions_builder(actions=None) -> IM:
+def select_actions_builder(actions: list = None) -> IM:
     select_actions_kb = BD()
     # Если какое-либо действие ещё не было задано
     if actions is None:
