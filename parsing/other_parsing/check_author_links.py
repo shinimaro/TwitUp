@@ -22,7 +22,7 @@ async def check_author_links(check_dict: CheckAuthorLinks, link_actions: LinkAct
     page_post = (await driver.pages())[0] if not link_actions.account_link else await driver.newPage()
     if link_actions.account_link:
         tasks.append(_checking_author_profile(check_dict, page_profile, link_actions.account_link))
-    elif link_actions.post_link:
+    if link_actions.post_link:
         tasks.append(_checkig_author_post(check_dict, page_post, link_actions.post_link))
     await gather(*tasks)
     await master.give_driver(driver)

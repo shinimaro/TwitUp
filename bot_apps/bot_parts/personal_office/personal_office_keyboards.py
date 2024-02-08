@@ -9,6 +9,7 @@ from bot_apps.other_apps.wordbank import BACK_PERSONAL_ACCOUNT, payment, history
 from bot_apps.other_apps.wordbank import accounts, BACK, FORWARD
 from bot_apps.other_apps.wordbank import personal_account, BACK_MAIN_MENU
 from databases.database import Database
+from parsing.elements_storage.elements_dictionary import base_links
 
 db = Database()
 
@@ -109,9 +110,12 @@ def keyboard_under_account_builder(account_name, page=None, status='active') -> 
     keyboard_under_account = BD()
     # Собираем
     for key, value in accounts['buttons']['buttons_for_account'].items():
-        if key == 'disable_button' and status == 'inactive':
-            key, value = 'enable_button', 'Включить в работу'
-        keyboard_under_account.row(IB(text=value, callback_data=key[:-6]+account_name), width=1)
+        if key == 'up_level_button':
+            keyboard_under_account.row(IB(text=value, url=f"{base_links['home_page']}{account_name[1:]}"))
+        else:
+            if key == 'disable_button' and status == 'inactive':
+                key, value = 'enable_button', 'Включить в работу'
+            keyboard_under_account.row(IB(text=value, callback_data=key[:-6]+account_name), width=1)
     keyboard_under_account.row(IB(text=BACK, callback_data=f'accounts_page_{page}' if page else f'accounts'), width=1)
     return keyboard_under_account.as_markup()
 
@@ -159,8 +163,8 @@ def not_rename_account_builder(account_name) -> IM:
     return keyboard.as_markup()
 
 
-# Клавиатура под сообщением о теневом бане
-def shadow_ban_builder() -> IM:
+# Клавиатура для возвращения обратно к аккаунтам
+def back_to_accounts_builder() -> IM:
     shadow_ban_kb = BD()
     shadow_ban_kb.row(
         IB(text=accounts['buttons']['new_account_button'],

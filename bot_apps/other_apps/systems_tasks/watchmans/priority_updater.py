@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 from asyncio import sleep
 from typing import NoReturn, NewType

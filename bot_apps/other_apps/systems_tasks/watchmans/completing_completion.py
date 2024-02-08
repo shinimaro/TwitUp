@@ -88,7 +88,7 @@ async def _calculate_execution(selected_tasks_dict: dict[int, SelectedDict]) -> 
 
 
 async def _select_workers(finally_dict: dict[int, int]):
-    """Простой отбор воркеров без новичков и """
+    """Простой отбор воркеров без новичков"""
     finally_selected_workers = {}
     for task_id in finally_dict:
         finally_selected_workers.setdefault(task_id, {})

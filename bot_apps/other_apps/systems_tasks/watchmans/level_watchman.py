@@ -9,6 +9,7 @@ db = Database()
 
 class WorkersDict(TypedDict):
     completed_tasks: int
+    sent_tasks: int
     level: str
 
 
@@ -29,7 +30,9 @@ async def select_workers(workers_dict: dict[int, WorkersDict]) -> dict[int, Work
     need_dict = await db.get_need_for_level()
     selected_workers_dict = {}
     for worker in workers_dict:
-        if workers_dict[worker]['completed_tasks'] < need_dict[workers_dict[worker]['level']]:
+        # Если юзеру было отправлено достаточно тасков на свой уровень, а также, он выполнил из них меньше, чем нужно
+        if (workers_dict[worker]['sent_tasks'] >= need_dict[workers_dict[worker]['level']] and
+                workers_dict[worker]['sent_tasks'] > workers_dict[worker]['completed_tasks']):
             selected_workers_dict[worker] = {'completed_tasks': workers_dict[worker]['completed_tasks'], 'level': workers_dict[worker]['level']}
     return selected_workers_dict
 

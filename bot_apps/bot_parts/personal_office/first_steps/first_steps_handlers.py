@@ -14,7 +14,7 @@ from bot_apps.bot_parts.personal_office.first_steps.first_steps_keyboards import
     shadow_ban_keyboard_builder, not_add_first_account_builder
 from bot_apps.bot_parts.personal_office.personal_office_filters import correct_account
 from bot_apps.bot_parts.personal_office.personal_office_handlers import all_our_users
-from bot_apps.bot_parts.personal_office.personal_office_keyboards import shadow_ban_builder
+from bot_apps.bot_parts.personal_office.personal_office_keyboards import back_to_accounts_builder
 from bot_apps.other_apps.FSM.FSM_states import FSMAccounts
 from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.wordbank import accounts, rules
@@ -105,7 +105,7 @@ async def process_check_first_task(callback: CallbackQuery, state: FSMContext):
         check_on_requirements: bool | str = await check_profile(account)
         if isinstance(check_on_requirements, str):
             await callback.message.edit_text(check_on_requirements,
-                                             reply_markup=shadow_ban_builder(),
+                                             reply_markup=back_to_accounts_builder(),
                                              disable_web_page_preview=True)
         else:
             await callback.message.edit_text(accounts['result_check'].format(account[1:]),

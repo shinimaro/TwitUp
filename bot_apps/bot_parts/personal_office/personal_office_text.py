@@ -23,7 +23,6 @@ async def personal_account_text_builder(tg_id: str | int) -> str:
 
 
 # Функция для составления текста с информацией об аккаунтах в один список
-# Это нужно для того, чтобы не обращаться раз за разом к базе данных, тормозя бота
 async def accounts_text_builder(accounts_dict: dict) -> dict:
     # Если аккаунтов нет
     if not accounts_dict:

@@ -1,5 +1,4 @@
 import asyncio
-from dataclasses import dataclass
 
 from pyppeteer.page import Page
 
@@ -23,7 +22,7 @@ async def parsing_user_list(page: Page, user: str, link: str, count_amount: int 
     users.extend(user for user in (await find_all_users(html, page, [])) if user not in users)
     # Если не нашли юзера, уходим в цикл
     if user not in users:
-        while len(users) <= count_amount:
+        while len(users) <= count_amount and not page.isClosed():
             intermediate_len = len(users)
             # Берём новых пользователей
             html = await page_interactions.scroll()
@@ -44,22 +43,23 @@ async def parsing_user_subscriptions(page: Page, user: str, link: str) -> list[s
     users = []
     page_interactions = PageInteraction(page, link)
     html = await page_interactions.open_first_users()
-    users.extend(username for username in await find_all_users(html, page, []) if username not in users)
-    if user not in users:
-        while True:
-            intermediate_len = len(users)
-            html = await page_interactions.scroll()
-            users.extend(user for user in await find_all_users(html, page, []) if user not in users)
-            if user in users:
-                html = await page_interactions.scroll()
-                users.extend(username for username in await find_all_users(html, page, []) if username not in users)
-                return users
-            if intermediate_len == len(users):
-                break
-    else:
-        html = await page_interactions.scroll()
+    if html:
         users.extend(username for username in await find_all_users(html, page, []) if username not in users)
-        return users
+        if user not in users:
+            while True and not page.isClosed():
+                intermediate_len = len(users)
+                html = await page_interactions.scroll()
+                users.extend(user for user in await find_all_users(html, page, []) if user not in users)
+                if user in users:
+                    html = await page_interactions.scroll()
+                    users.extend(username for username in await find_all_users(html, page, []) if username not in users)
+                    return users
+                if intermediate_len == len(users):
+                    break
+        else:
+            html = await page_interactions.scroll()
+            users.extend(username for username in await find_all_users(html, page, []) if username not in users)
+            return users
     return False  # Юзер не был найден
 
 
@@ -69,22 +69,22 @@ async def parsing_in_posts(page: Page, post: str, link: str, number_amount: int 
     page_interactions = PageInteraction(page, link)
     # Открытие страницы и сбор первых 2-3 постов
     html = await page_interactions.open_first_posts()
-    posts.update(await find_all_posts(html, page))
-    # Если среди первых постов не нашлось нужного, спускаемся к другим постам
-    if post not in posts:
-        while len(posts) <= number_amount:
-            intermediate_len = len(posts)
-            html = await page_interactions.scroll()
-            # print('Получил html страницу после scroll', html)
-            posts.update(await find_all_posts(html, page))
-            # Нашли нужный пост и всё ок
-            if post in posts:
-                return True
-            # Если постов больше нет, останавливаем
-            if intermediate_len == len(posts):
-                break
-    else:
-        return True
+    if html:
+        posts.update(await find_all_posts(html, page))
+        # Если среди первых постов не нашлось нужного, спускаемся к другим постам
+        if post not in posts:
+            while len(posts) <= number_amount and not page.isClosed():
+                intermediate_len = len(posts)
+                html = await page_interactions.scroll()
+                posts.update(await find_all_posts(html, page))
+                # Нашли нужный пост и всё ок
+                if post in posts:
+                    return True
+                # Если постов больше нет, останавливаем
+                if intermediate_len == len(posts):
+                    break
+        else:
+            return True
     return False
 
 
@@ -94,27 +94,28 @@ async def parsing_retweets_in_posts(page: Page, post: str, link: str, number_amo
     page_interactions = PageInteraction(page, link)
     # Открытие страницы и сбор первых 2-3 постов
     html = await page_interactions.open_first_posts()
-    retweets.update(await find_all_retweets(html, page))
-    # Если среди первых постов не нашлось нужного ретвита, спускаемся к другим постам
-    if post not in retweets:
-        while len(retweets) <= number_amount:
-            intermediate_len = len(retweets)
-            html = await page_interactions.scroll()
-            retweets.update(await find_all_retweets(html, page))
-            if post in retweets:
-                return True
-            # Т.к. непонятно, мы просто ретвитов не видим или постов не осталось, делаем ещё доп прокрутку
-            if intermediate_len == len(retweets):
-                for _ in range(1):
-                    intermediate_len = len(retweets)
-                    html = await page_interactions.scroll()
-                    retweets.update(await find_all_retweets(html, page))
-                    if intermediate_len < len(retweets):
-                        break
-                else:
-                    return False
-    else:
-        return True
+    if html:
+        retweets.update(await find_all_retweets(html, page))
+        # Если среди первых постов не нашлось нужного ретвита, спускаемся к другим постам
+        if post not in retweets:
+            while len(retweets) <= number_amount and not page.isClosed():
+                intermediate_len = len(retweets)
+                html = await page_interactions.scroll()
+                retweets.update(await find_all_retweets(html, page))
+                if post in retweets:
+                    return True
+                # Т.к. непонятно, мы просто ретвитов не видим или постов не осталось, делаем ещё доп прокрутку
+                if intermediate_len == len(retweets):
+                    for _ in range(1):
+                        intermediate_len = len(retweets)
+                        html = await page_interactions.scroll()
+                        retweets.update(await find_all_retweets(html, page))
+                        if intermediate_len < len(retweets):
+                            break
+                    else:
+                        return False
+        else:
+            return True
     return False
 
 
@@ -122,18 +123,19 @@ async def parsing_retweets_in_posts(page: Page, post: str, link: str, number_amo
 async def parsing_comments_in_posts(page: Page, post: str, user: str, link: str, number_amount: int = 15) -> tuple[str, str] | bool:
     page_interactions = PageInteraction(page, link)
     html = await page_interactions.open_first_posts()
-    all_posts, com_link = await find_all_comments(html, [], user, post, page)
-    if not isinstance(all_posts, str):
-        while len(all_posts) <= number_amount:
-            intermediate_len = len(all_posts)
-            html = await page_interactions.scroll()
-            all_posts, com_link = await find_all_comments(html, all_posts, user, post, page)
-            if isinstance(com_link, str):
-                return all_posts, com_link
-            if intermediate_len == len(all_posts):
-                break
-    else:
-        return all_posts, com_link
+    if html:
+        all_posts, com_link = await find_all_comments(html, [], user, post, page)
+        if not isinstance(all_posts, str):
+            while len(all_posts) <= number_amount and not page.isClosed():
+                intermediate_len = len(all_posts)
+                html = await page_interactions.scroll()
+                all_posts, com_link = await find_all_comments(html, all_posts, user, post, page)
+                if isinstance(com_link, str):
+                    return all_posts, com_link
+                if intermediate_len == len(all_posts):
+                    break
+        else:
+            return all_posts, com_link
     return False
 
 
@@ -177,23 +179,24 @@ async def check_post_for_like(page: Page, post_link: str) -> bool:
 
 
 async def get_users_list(page: Page, link: str) -> list[str]:
-    """Получить список всех доступных юзеров в подписках/подписчиках"""
+    """Получить список всех юзеров в подписках/подписчиках"""
     users_list = []
     page_interactions = PageInteraction(page, link)
     html = await page_interactions.open_first_users()
-    users_list.extend(user for user in await find_all_users(html, page, []) if user not in users_list)
-    while True:
-        intermediate_len = len(users_list)
-        # Берём новых пользователей
-        html = await page_interactions.scroll()
+    if html:
         users_list.extend(user for user in await find_all_users(html, page, []) if user not in users_list)
-        # Дошли до конца страницы
-        if intermediate_len == len(users_list):
-            await asyncio.sleep(2)
+        while True and not page.isClosed():
+            intermediate_len = len(users_list)
+            # Берём новых пользователей
             html = await page_interactions.scroll()
             users_list.extend(user for user in await find_all_users(html, page, []) if user not in users_list)
+            # Дошли до конца страницы
             if intermediate_len == len(users_list):
-                return users_list
+                await asyncio.sleep(2)
+                html = await page_interactions.scroll()
+                users_list.extend(user for user in await find_all_users(html, page, []) if user not in users_list)
+                if intermediate_len == len(users_list):
+                    return users_list
 
 
 async def get_number_subs(page: Page, profile_link: str, find_subscribers_flag: bool = True) -> int | None:

@@ -176,7 +176,9 @@ async def process_refuse_task(callback: CallbackQuery):
     if result is None:
         await callback.message.edit_text(task_completion['not_check_task'], reply_markup=await not_parsing_builder(tasks_msg_id))
         return
-    # Проходимся по все ключам, кроме комментария (т.к. чекер может его просто не найти)
+    if not await db.check_tasks_messages_on_active(tasks_msg_id):  # Если, пока проходила проверка, задание по каким-то причинам завершилось (админ например завершил)
+        return
+    # Проходимся по все ключам, кроме комментария (т.к. чекер может его просто не найти в постах юзера)
     for key in result:
         # Если чекер нашёл невыполнение какого-то действия и это не комментарий
         if not result[key] and key != 'comments':
@@ -245,6 +247,8 @@ async def get_link_comment(message: Message, result: int | dict):
         await db.change_task_message_id(tasks_msg_id, message_id.message_id)
         comment_text = await parsing_comment_text(tasks_msg_id, message.text.lower())
         check_comment = await comment_check_itself(tasks_msg_id, comment_text)
+        if not await db.check_tasks_messages_on_active(tasks_msg_id):  # Если, пока проходила проверка, задание по каким-то причинам завершилось (админ например завершил)
+            return
         # Если вернулся текст с ошибкой
         if isinstance(check_comment, str):
             await db.update_status_and_time(tasks_msg_id, 'process_comments')

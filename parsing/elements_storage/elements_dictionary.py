@@ -1,5 +1,6 @@
 from typing import TypeVar
 
+twitt_up_account = '@TwittUpProject'
 
 # Здесь находятся основные ссылки, исполуемые при парсинге
 base_links = {
@@ -8,9 +9,9 @@ base_links = {
     # Страница, через которую предпочтительнее логиниться
     'login_page': 'https://twitter.com/i/flow/login',
     # Страница для просмотра всех наших пепещиков, но пока аккаунта нужного нет
-    'followers_page': f'https://twitter.com/{"JujutsuTwts"}/followers',
+    'followers_page': f'https://twitter.com/{twitt_up_account}/followers',
     # Страница на которую нужно подписаться
-    'account_page': f'https://twitter.com/{"JujutsuTwts"}'
+    'account_page': f'https://twitter.com/{twitt_up_account}'
 }
 
 
@@ -83,8 +84,9 @@ login_blocks = {
 other_blocks = {
     # Кнопка "опубликовать пост", которую я обычно юзаю для прогрузки страницы с комментарием,
     # а также для прогрузки домашней страницы при загрузке вебдрайвера
-    'publish_button': 'css-175oi2r r-sdzlij r-1phboty r-rs99b7 r-lrvibr r-19u6a5r r-2yi16 r-1qi8awa r-ymttw5 r-o7ynqc r-6416eg r-icoktb r-1ny4l3l'}
-
+    'publish_button': 'css-175oi2r r-sdzlij r-1phboty r-rs99b7 r-lrvibr r-19u6a5r r-2yi16 r-1qi8awa r-ymttw5 r-o7ynqc r-6416eg r-icoktb r-1ny4l3l',
+    # div блок, в котором говорится о том, что нет никакой информации о каком-то разделе (нет подписок, нет постов и т.п.)
+    'not_info_block': 'css-175oi2r r-1kihuf0 r-1jgb5lz r-764hgp r-jzhu7e r-1dye5f7 r-13qz1uu'}
 # Здесь находятся различные скрипты, которые могу понадобитья во время парсинга
 scripts = {
     # Функция для скрола вниз (стоит 2к, потому что это максимальное число,

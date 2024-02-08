@@ -32,8 +32,8 @@ class Master:
     async def generate_main_driver(self) -> None:
         await self._watchman_webdriver_activate()  # Сразу создадим сторож-вебдрайвер для просмотра пепещиков
         while self.usable_drivers_queue.qsize() < config.webdrivers.num_webdrivers:
-            difference = config.webdrivers.num_webdrivers - self.usable_drivers_queue.qsize()
-            tasks = [self._generate() for _ in range(difference)]
+            tasks = [self._generate() for _ in range(min(config.webdrivers.webdrivers_at_once,
+                                                         config.webdrivers.num_webdrivers - self.usable_drivers_queue.qsize()))]
             await gather(*tasks)
             print(f'Вебдрайверов готово: {self.usable_drivers_queue.qsize()}. Осталось сгенерировать вебдрайверов: {config.webdrivers.num_webdrivers - self.usable_drivers_queue.qsize()}')
 
@@ -49,8 +49,10 @@ class Master:
     # Функция для включения вебдрайвера-сторожа для парсинга пепещиков
     async def _watchman_webdriver_activate(self) -> None:
         webdrivers = Webdrivers()
-        driver = await webdrivers.webdriver()
-        self.watchman_webdriver['driver'] = driver
+        while not self.watchman_webdriver['driver']:
+            driver = await webdrivers.webdriver()
+            if driver:
+                self.watchman_webdriver['driver'] = driver
         self.watchman_webdriver['page'] = (await driver.pages())[0]
         page: Page = self.watchman_webdriver['page']
         await page.goto(base_links['followers_page'])
@@ -72,7 +74,8 @@ class Master:
     # Закрытие всех лишних страниц в вебдрайвере
     @staticmethod
     async def close_pages(driver) -> None:
-        await asyncio.gather(*[page.close() for page in (await driver.pages())[1:]])
+        await driver.newPage()
+        await asyncio.gather(*[page.close() for page in (await driver.pages())[:-1]])
 
     # Достать драйвер
     async def get_driver(self) -> Browser:
@@ -82,7 +85,10 @@ class Master:
         # Если нет, создаём новый
         else:
             webdrivers = Webdrivers()
-            return await webdrivers.webdriver()
+            driver = None
+            while not driver:
+                driver = await webdrivers.webdriver()
+            return driver
 
     # Вернуть драйвер
     async def give_driver(self, driver: Browser) -> None:
@@ -96,12 +102,12 @@ class Master:
 
     # Функция, в которую будут складывать не рабочие вебдрайверы (должна заменять вебдрайвер, проверять его на работоспособность и, если что-то с аккаунтом, то удалять такой файл и сообщать об этом (наверное изменять название файла на брокен + логин аккаунта)
     async def give_broke_driver(self, driver: Browser) -> None:
+        await self.close_pages(driver)
         page = (await driver.pages())[0]
         # Провеяем, заходит ли вебдрайвер на главную страницу или он косячный
         if not await self.check_driver(page):
             # Берём куки и закрываем драйвер
             cookies = (await page.cookies())[0]
-            await self.close_pages(driver)
             # Находим папку с куками всех аккаунтов
             current_file_dir = os.path.dirname(__file__)
             file_path = os.path.join(current_file_dir, '.', 'cookies/')
@@ -144,6 +150,17 @@ class Master:
         try:
             await page.goto(base_links['home_page'], timeout=30000)
             await page.waitForSelector(converter(other_blocks['publish_button']), timeout=3000)
+            await page.goto('about:blank')
             return True
         except pyppeteer.errors.TimeoutError:
             return False
+
+
+if __name__ == '__main__':
+    async def sus():
+        master = Master()
+        await master.get_driver()
+
+    asyncio.get_event_loop().run_until_complete(sus())
+
+

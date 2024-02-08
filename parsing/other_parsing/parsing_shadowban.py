@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import dataclass
 from random import choice
@@ -56,3 +57,5 @@ async def parsing_shadowban(username: str) -> bool:
     """Проверить аккаунт на теневой бан"""
     data: BanResponse | None = await _get_response(username)
     return _ban_check(data)
+
+asyncio.get_event_loop()

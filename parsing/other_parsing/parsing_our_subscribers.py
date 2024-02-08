@@ -10,7 +10,6 @@ from parsing.parsing_functions.page_Interaction import PageInteraction
 
 
 class AllOurUsers:
-    # Временное хранилище, вместо редиса
     all_our_users: set[str] = set()
     all_our_users_lock = asyncio.Lock()
     last_update_time = time.time()
@@ -41,7 +40,7 @@ class AllOurUsers:
                             self.common_page: Page = self.master.watchman_webdriver['page']  # Обновляем страницу
                             continue
                         users = set()
-                        while len(users) < 30:
+                        while len(users) < 1:
                             parsing_interaction = PageInteraction(self.common_page, '')  # Потом убрать
                             await parsing_interaction.scroll()
                             html = await self.common_page.content()

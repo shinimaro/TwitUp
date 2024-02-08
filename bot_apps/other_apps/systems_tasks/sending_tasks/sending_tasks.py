@@ -1,9 +1,9 @@
 import asyncio
 from typing import TypedDict
 
-from aiogram import Router, Bot
+from aiogram import Router, Bot, F
 from aiogram.exceptions import TelegramForbiddenError
-
+from aiogram.types import Message
 from bot_apps.bot_parts.task_push.task_push_keyboards import new_task_keyboard_builder
 from bot_apps.other_apps.filters.ban_filters.they_banned import TheyBanned
 from bot_apps.other_apps.filters.limits_filters.message_limit_filter import MessageFilter
@@ -26,7 +26,7 @@ class TaskInfo(TypedDict):
 
 # @router.message(F.text == 'q')
 # async def sending_task(message: Message) -> None:
-#     task_id = 48
+#     task_id = 1
 #     workers = {message.from_user.id: 2}
 async def sending_task(task_id: int, workers: dict[int, int]) -> None:
     tasks = []

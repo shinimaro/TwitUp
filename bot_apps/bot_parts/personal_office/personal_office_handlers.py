@@ -1,5 +1,6 @@
 import math
 import random
+import time
 from asyncio import sleep
 
 import base58
@@ -17,7 +18,7 @@ from bot_apps.bot_parts.personal_office.personal_office_keyboards import persona
     keyboard_under_account_builder, account_delete_builder, back_button_builder, add_account_builder, \
     not_add_account_builder, account_added_successfully_builder, payment_keyboard_builder, \
     button_back_personal_office_builder, history_keyboard_builder, history_account_keyboard_builder, \
-    list_tasks_keyboards, shadow_ban_builder, back_to_account_kb, insert_new_account_name, \
+    list_tasks_keyboards, back_to_accounts_builder, back_to_account_kb, insert_new_account_name, \
     not_rename_account_builder, back_to_account_afret_rename, back_to_payment, back_to_payment_and_generate
 from bot_apps.bot_parts.personal_office.personal_office_text import personal_account_text_builder, \
     accounts_text_builder, \
@@ -94,7 +95,7 @@ async def open_account(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await callback.message.edit_text(
         accounts['account_info'].format(f'<a href="https://twitter.com/{name[1:]}">{name}</a>',
-                                        info_dict['status'],
+                                        accounts['status_accounts'][info_dict['status']],
                                         int(info_dict['account_balance']) if info_dict['account_balance'].is_integer() else round(info_dict['account_balance'], 2),
                                         int(info_dict['earned']) if float(info_dict['earned']).is_integer() else round(info_dict['earned'], 2),
                                         info_dict['type'].get('subscriptions', 0), info_dict['type'].get('likes', 0),
@@ -270,6 +271,10 @@ async def adding_account(message: Message, state: FSMContext):
 @router.callback_query(F.data == 'confirm_add')
 async def process_check_account(callback: CallbackQuery, state: FSMContext):
     account = (await state.get_data())['account']
+    # if last_check_time is not None and (last_check_time - time.time()) < 30:  # Если аккаунт уже добавлялся недавно
+    #     await callback.message.edit_text(accounts['account_added_frequently'].format(account[1:]),
+    #                                      reply_markup=back_to_accounts_builder())
+    #     return
     await callback.message.edit_text(accounts['examination'].format(account))
     await sleep(random.uniform(1, 3))
     all_users = await all_our_users.get_all_our_users()
@@ -281,7 +286,7 @@ async def process_check_account(callback: CallbackQuery, state: FSMContext):
     # Если аккаунт найден, то бот открывает функция для его проверки на теневой бан
     elif await parsing_shadowban(account) is False:
         await callback.message.edit_text(accounts['shadow_ban'].format(account[1:]),
-                                         reply_markup=shadow_ban_builder(),
+                                         reply_markup=back_to_accounts_builder(),
                                          disable_web_page_preview=True)
     # Если всё ок
     else:
@@ -289,7 +294,7 @@ async def process_check_account(callback: CallbackQuery, state: FSMContext):
         check_on_requirements: bool | str = await check_profile(account)
         if isinstance(check_on_requirements, str):
             await callback.message.edit_text(check_on_requirements,
-                                             reply_markup=shadow_ban_builder(),
+                                             reply_markup=back_to_accounts_builder(),
                                              disable_web_page_preview=True)
         else:
             tg_id = callback.from_user.id

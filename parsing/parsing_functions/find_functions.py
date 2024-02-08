@@ -1,5 +1,7 @@
 import datetime
+import math
 import re
+import time
 from asyncio import sleep
 
 import bs4
@@ -7,7 +9,7 @@ from bs4 import BeautifulSoup
 from pyppeteer.page import Page
 
 from parsing.elements_storage.elements_dictionary import subscribers_blocks, post_blocks, comment_blocks, \
-    profile_blocks, base_links, converter
+    profile_blocks, base_links, converter, other_blocks
 
 
 # Функция для поиска всех юзеров в списке юзеров через суп
@@ -85,10 +87,10 @@ async def find_all_comments(html_page: str, all_posts: list, user: str, post: st
             for index, block in enumerate(all_posts):
                 post_link = base_links['home_page'][:-1] + _get_post_link(block)
                 # Если мы нашли нужный пост и у нас есть ещё посты для проверки
-                if post_link == post and len(all_posts) > index:
+                if post_link == post and len(all_posts) > index+1:
                     comment = all_posts[index+1]
                     # Проверка на то, что этот коммент (цитата) написана нашим пользователем
-                    author_comment = comment.find('div', class_=post_blocks['username_author']).text
+                    author_comment = comment.find('div', class_=post_blocks['username_author']).text.lower()
                     if author_comment == user:
                         comment_text: str = comment.find('div', class_=post_blocks['post_text']).text
                         comment_link: str = base_links['home_page'][:-1] + _get_post_link(all_posts[index+1])
@@ -238,3 +240,12 @@ async def check_post_on_profile(page: Page) -> bool:
         return True
     except TimeoutError:
         return False
+
+
+def checking_for_empty_block(html_page: str):
+    """Проверка на то, что нет блока, говорящего о том, что информации нет"""
+    soup = BeautifulSoup(html_page, 'lxml')
+    empty_block = soup.find('div', other_blocks['not_info_block'])
+    if empty_block:
+        return True
+    return False

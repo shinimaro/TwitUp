@@ -1,3 +1,5 @@
+import asyncio
+import math
 import os
 import pickle
 from dataclasses import dataclass
@@ -32,10 +34,6 @@ class TwitterAccount:
     proxy: Proxy
 
 
-async def webdriver():
-    pass
-
-
 class Webdrivers:
     headless_mode: bool = True
     twitter_accounts: dict[str, TwitterAccount] = {}
@@ -53,10 +51,10 @@ class Webdrivers:
         await self._set_proxy_autentification()
         await self._load_cookies()
         if await self._load_base_twitter_url():
+            await self.open_default_page()
             return self.current_driver
         else:
             await self.current_driver.close()
-            await self.webdriver()
 
         # Пример настройки мобильного прокси, которое pypetter сам будет менять
         # proxy_endpoint = "http://username:password@p.webshare.io:80"
@@ -154,7 +152,7 @@ class Webdrivers:
         try:
             await self.current_page.goto(base_links['login_page'])
             await self.current_page.waitForSelector(login_blocks['username_input'], timeout=8000)
-            return self._login_in_twitter()
+            return await self._login_in_twitter()
         except pyppeteer.errors.TimeoutError:
             print(f'Аккаунт {self.current_login} попал куда-то непонятно куда, ни на страницу для входа, ни на домашнюю страницу')
             return False
@@ -164,6 +162,9 @@ class Webdrivers:
         password = Webdrivers.twitter_accounts[self.current_login].password
         print(f'Пробую залогинить аккаунт {self.current_login}')
         return await twitter_login(self.current_page, self.current_login, password)
+
+    async def open_default_page(self):
+        await self.current_page.goto('about:blank')
 
     @staticmethod
     def _get_accounts_file_path() -> str:

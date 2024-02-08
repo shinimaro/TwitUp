@@ -54,19 +54,9 @@ class BaseStartChecking:
         return LinkAction(account_link=self.links_dict.get('subscriptions'),
                           post_link=next((self.links_dict[key] for key in ['likes', 'retweets', 'comments'] if key in self.links_dict), None))
 
-    def _check_failure(self) -> bool:
-        """Проверить, была ли найдена хоть одна ошибка"""
-        result = list(filter(lambda x: x is False, self.actions_dict.values()))
-        return True if result else False
-
     def _return_driver(self) -> None:
         """Запустить корутину по сдаче драйвера обратно"""
         asyncio.get_event_loop().create_task(self.master.give_driver(self.driver))
-
-    def closed_all_tasks(self) -> None:
-        """Закрыть выполнение всех задач"""
-        for corutine in self.tasks:
-            corutine.close()
 
     def _return_broke_driver(self) -> None:
         """Запустить корутину по сдаче сломанного драйвера"""

@@ -20,5 +20,6 @@ async def process_open_help_center(callback: CallbackQuery):
 # Открытие вопрос-ответ
 @router.callback_query(F.data == 'question-answer')
 async def process_open_question_answer(callback: CallbackQuery):
-    await callback.message.edit_text(help_center['question-answer'],
-                                     reply_markup=back_to_help_center_builder())
+    # await callback.message.edit_text(help_center['question-answer'],
+    #                                  reply_markup=back_to_help_center_builder())
+    await callback.answer(help_center['question-answer_stub'], show_alert=True)

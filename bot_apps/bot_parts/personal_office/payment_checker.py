@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import time
 from asyncio import sleep
 from decimal import Decimal
 from typing import Literal, TypedDict
@@ -35,20 +36,20 @@ class PaymentReceived(TypedDict):
 async def payment_checker() -> None:
     crypto_pay = CryptoPay()
     while True:
-        valid_wallets: bool = await db.check_valid_wallets()
-        if valid_wallets:
+        if await db.check_valid_wallets():
             last_id: int = await db.get_last_trancaction_id() + 1  # Находим id, с которого стоит начать поиск
             payment_received: list[PaymentReceived] = (crypto_pay.Transactions(str(last_id)))[1]  # Забираем информацию о транзакциях
             cost_stb: float = await db.get_stb_coint_cost()  # Берём актуальный курс нашей монети
             for trancaction_dict in payment_received:  # Отдельно обрабатываем каждую полученную транзакцию
-                await _payment_completed(
-                    PaymentData(
-                        transaction_id=trancaction_dict['id'],
-                        wallet_id=int(trancaction_dict['walletId']),
-                        amount=trancaction_dict['usd'],
-                        issued_by_stb=trancaction_dict['usd'] * Decimal(cost_stb),
-                        payment_date=trancaction_dict['time'],
-                        token=trancaction_dict['token']))
+                if _check_transaction_validity(trancaction_dict['timestamp']):  # Убираем лишние транзакции, которые прошли позже 30 минут назад
+                    await _payment_completed(
+                        PaymentData(
+                            transaction_id=trancaction_dict['id'],
+                            wallet_id=int(trancaction_dict['walletId']),
+                            amount=trancaction_dict['usd'],
+                            issued_by_stb=trancaction_dict['usd'] * Decimal(cost_stb),
+                            payment_date=trancaction_dict['time'],
+                            token=trancaction_dict['token']))
         await sleep(30)
 
 
@@ -66,3 +67,12 @@ async def _send_message_on_payment(tg_id: int, issued_by_stb) -> None:
         chat_id=tg_id,
         text=payment['account_replenished'].format(issued_by_stb),
         reply_markup=payment_completed_builder())
+
+
+def _check_transaction_validity(timestamp: float):
+    """Проверка на то, что транзакцию ещё можно обработать и не прошло более 30 минут"""
+    now_time = time.time()
+    different_time = now_time - timestamp
+    if (different_time / 60) < 30:
+        return True
+    return False

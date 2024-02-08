@@ -24,6 +24,7 @@ from bot_apps.other_apps.errors import errors_handlers
 from bot_apps.other_apps.filters.ban_filters.is_banned import IsBanned
 from bot_apps.other_apps.filters.ban_filters.they_banned import TheyBanned
 from bot_apps.other_apps.other_handlers import other_handlers
+from bot_apps.other_apps.systems_tasks.sending_tasks import sending_tasks
 from bot_apps.other_apps.systems_tasks.watchmans.checking_tasks import main_task_checker
 from bot_apps.other_apps.systems_tasks.watchmans.completing_completion import completing_completion_checker
 from bot_apps.other_apps.systems_tasks.watchmans.fines_collector import check_fines_collector
@@ -70,6 +71,7 @@ async def _start_bot() -> NoReturn:
     dp.include_router(personal_office_handlers.router)
     dp.include_router(other_handlers.router)
     dp.include_router(errors_handlers.router)
+    # dp.include_router(sending_tasks.router)
     await bot.delete_webhook(drop_pending_updates=True)
     dp.startup.register(bot_menu_builder)
     await dp.start_polling(bot)
@@ -118,12 +120,14 @@ async def _fill_ban_lists():
 
 # Хранилище для состояний бота
 async def _get_storage() -> RedisStorage | MemoryStorage:
-    redis = Redis(host='redis_db')
+    redis = Redis(host=config.redis.redis_host,
+                  port=config.redis.redis_port)
     try:
         await redis.ping()  # Проверка коннекта
-        return RedisStorage(redis=redis)
     except redis_exceptions.ConnectionError:
         return MemoryStorage()
+    else:
+        return RedisStorage(redis=redis)
 
 
 if __name__ == '__main__':

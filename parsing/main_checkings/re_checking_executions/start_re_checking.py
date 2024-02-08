@@ -6,6 +6,7 @@ from typing import Callable, Optional
 from databases.database import Database
 from parsing.elements_storage.elements_dictionary import base_links
 from parsing.main_checkings.base_start_checking import BaseStartChecking
+from parsing.main_checkings.checking_exceptions import SubscriptionFailed, LikeFailed, RetweetFailed, CommentFailed
 from parsing.main_checkings.re_checking_executions.main_parsing_functions import ReCheckExecutions
 
 db = Database()
@@ -29,23 +30,24 @@ class StartReChecking(BaseStartChecking):
         await self._initialize_attributes()
         await self._set_re_check_execution()
         await self._set_need_args_for_re_checking()
+        self._full_out_tasks_list()
         try:
             async with asyncio.timeout(3 * 60):
-                self._full_out_tasks_list()
-                await gather(*self.tasks)
-                self._return_driver()
-                return self._final_check()
+                try:
+                    await gather(*self.tasks)
+                except (SubscriptionFailed, LikeFailed, RetweetFailed, CommentFailed):
+                    self._return_driver()
+                    return False
+                else:
+                    self._return_driver()
+                    return True
         except asyncio.TimeoutError:
-            self.closed_all_tasks()
             self._return_driver()  # Т.к. машина может проверять очень долго и это не обязательно должен быть сбой драйвера, то возвращаем его таким же, какой и был, а не как сломанный
-            if self._check_failure():
-                return False
             return True
 
     async def _set_re_check_execution(self) -> None:
         """Взять все данные, необходимые для проверки выполнения"""
-        self.re_check_execution = ReCheckExecutions(actions_dict=self.actions_dict,
-                                                    workerk_username=(await db.get_worker_username(self.tasks_msg_id)).lower(),
+        self.re_check_execution = ReCheckExecutions(workerk_username=(await db.get_worker_username(self.tasks_msg_id)).lower(),
                                                     post=self._get_links_on_actions().post_link)
 
     async def _set_need_args_for_re_checking(self) -> None:

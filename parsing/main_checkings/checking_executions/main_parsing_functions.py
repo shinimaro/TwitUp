@@ -4,8 +4,10 @@ from typing import NamedTuple, TypedDict, Optional
 from pyppeteer.page import Page
 
 from databases.database import Database
+from parsing.elements_storage.elements_dictionary import base_links
+from parsing.main_checkings.checking_exceptions import SubscriptionFailed, LikeFailed, RetweetFailed, CommentFailed
 from parsing.parsing_functions.parsing_functions import parsing_user_list, \
-    parsing_comments_in_posts, parsing_user_subscriptions, parsing_in_posts
+    parsing_comments_in_posts, parsing_user_subscriptions, parsing_in_posts, get_number_subs
 
 db = Database()
 
@@ -40,32 +42,35 @@ class CheckExecution:
     async def parsing_subscriptions(self, page: Page, tasks_msg_id: int, link_to_worker: str, link_to_author: str) -> None:
         """Проверка подписки"""
         author_username = '@' + link_to_author[20:]
-
         subs_list: list[str] | bool = await parsing_user_subscriptions(page, author_username, link_to_worker)
         if subs_list:
             await db.save_worker_cut(tasks_msg_id, *self._get_cut_users(subs_list, author_username))
-            self._set_result_subscriptions(True)
+            self._handle_subscriptions_checking(True)
         else:
-            subs_author: list[str] | bool = await parsing_user_subscriptions(page, self.worker_username, link_to_author)
-            if subs_author:
-                await db.save_author_cut(tasks_msg_id, *self._get_cut_users(subs_author))
-                self._set_result_subscriptions(True)
+            following_worker = await get_number_subs(page, base_links['home_page'] + self.worker_username, find_subscribers_flag=False)
+            if following_worker <= 50:
+                self._handle_subscriptions_checking(False)
             else:
-                self._set_result_subscriptions(False)
+                subs_author: list[str] | bool = await parsing_user_subscriptions(page, self.worker_username, link_to_author)
+                if subs_author:
+                    await db.save_author_cut(tasks_msg_id, *self._get_cut_users(subs_author))
+                    self._handle_subscriptions_checking(True)
+                else:
+                    self._handle_subscriptions_checking(False)
 
     async def parsing_likes(self, page: Page, link_to_user_likes: str, link_to_post_likes: str) -> None:
         """Проверка лайка"""
         result: bool = await parsing_in_posts(page, self.post, link_to_user_likes)
         if not result:
             result: bool = await parsing_user_list(page, self.worker_username, link_to_post_likes)
-        self._set_result_likes(result)
+        self._handle_likes_checking(result)
 
     async def parsing_retweets(self, page: Page, link_to_user_replies: str, link_to_post_retweets: str) -> None:
         """Проверка ретвита"""
         result: bool = await parsing_in_posts(page, self.post, link_to_user_replies)
         if not result:
             result: bool = await parsing_user_list(page, self.worker_username, link_to_post_retweets)
-        self._set_result_retweets(result)
+        self._handle_retweets_checking(result)
 
     async def parsing_comments(self, page: Page, link_to_user_replies: str) -> None:
         """Проверка комментария"""
@@ -73,7 +78,7 @@ class CheckExecution:
         if result:
             self._set_values_found_comments(result)
         else:
-            self._set_result_comments(result)
+            self._raise_comment_failed()
 
     def _get_cut_users(self, users: list[str], author_username: str = None) -> SaveCuts:
         """Получить срез юзеров, по которым в дальнейшем будет производиться проверка"""
@@ -83,21 +88,31 @@ class CheckExecution:
                           user_index+4 if user_index+4 <= len(users) else len(users)]
         return SaveCuts(upper_cut=upper_cut, lower_cut=lower_cut)
 
-    def _set_result_subscriptions(self, value: bool) -> None:
+    def _handle_subscriptions_checking(self, value: bool) -> None:
         """Установить итог проверки подписки"""
-        self.action_dict['subscriptions'] = value
+        if value:
+            self.action_dict['subscriptions'] = True
+        else:
+            raise SubscriptionFailed
 
-    def _set_result_likes(self, value: bool) -> None:
+    def _handle_likes_checking(self, value: bool) -> None:
         """Установить итог проверки лайка"""
-        self.action_dict['likes'] = value
+        if value:
+            self.action_dict['likes'] = True
+        else:
+            raise LikeFailed
 
-    def _set_result_retweets(self, value: bool) -> None:
+    def _handle_retweets_checking(self, value: bool) -> None:
         """Установить итог проверки ретвита"""
-        self.action_dict['retweets'] = value
+        if value:
+            self.action_dict['retweets'] = value
+        else:
+            raise RetweetFailed
 
-    def _set_result_comments(self, value: bool) -> None:
+    @staticmethod
+    def _raise_comment_failed() -> None:
         """Установить итог проверки подписки"""
-        self.action_dict['comments'] = value
+        raise CommentFailed
 
     def _set_values_found_comments(self, values: tuple[str, str]):
         """Установить значения на найденый комментарий"""

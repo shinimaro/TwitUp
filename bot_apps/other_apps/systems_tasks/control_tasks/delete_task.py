@@ -1,6 +1,7 @@
 import asyncio
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest
 
 from bot_apps.bot_parts.task_push.task_push_keyboards import ok_button_two_builder, finally_task_builder
 from bot_apps.other_apps.filters.limits_filters.callback_limit_filter import CallbackFilter
@@ -45,9 +46,12 @@ async def _delete_message(info_dict: InfoForDeleteTask, tasks_msg_id: int) -> No
     """Удаление сообщения о задании"""
     await db.add_del_time_in_task(tasks_msg_id)
     await db.add_deleted_status(tasks_msg_id)
-    await bot.delete_message(
-        chat_id=info_dict['telegram_id'],
-        message_id=info_dict['message_id'])
+    try:
+        await bot.delete_message(
+            chat_id=info_dict['telegram_id'],
+            message_id=info_dict['message_id'])
+    except TelegramBadRequest:
+        pass
 
 
 async def _edit_message_after_offer_more(info_dict: InfoForDeleteTask, tasks_msg_id: int, text: str) -> None:
@@ -55,11 +59,14 @@ async def _edit_message_after_offer_more(info_dict: InfoForDeleteTask, tasks_msg
     await db.add_del_time_in_task(tasks_msg_id)
     await db.add_deleted_status(tasks_msg_id)
     await callback_filter(user_id=info_dict['telegram_id'])
-    await bot.edit_message_text(
-        chat_id=info_dict['telegram_id'],
-        message_id=info_dict['message_id'],
-        text=text,
-        reply_markup=ok_button_two_builder(tasks_msg_id))
+    try:
+        await bot.edit_message_text(
+            chat_id=info_dict['telegram_id'],
+            message_id=info_dict['message_id'],
+            text=text,
+            reply_markup=ok_button_two_builder(tasks_msg_id))
+    except TelegramBadRequest:
+        pass
 
 
 async def _force_deletion_message_with_reward(info_dict: InfoForDeleteTask, tasks_msg_id: int) -> None:

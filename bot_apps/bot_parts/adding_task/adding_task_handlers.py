@@ -1,3 +1,5 @@
+import asyncio
+
 from aiogram import Router, Bot, F
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext

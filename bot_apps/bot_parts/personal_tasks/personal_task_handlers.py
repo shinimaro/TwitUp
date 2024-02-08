@@ -13,7 +13,8 @@ from bot_apps.bot_parts.personal_tasks.personal_task_keyboards import personal_t
     noneactive_task_keyboard, increased_executions_keyboard, add_new_executions_keyboard, \
     warning_before_deletion_keyboard, delete_task_keyboard, del_task_keyboard, editing_duplication_keyboard, \
     active_tasks_menu_keyboard, history_tasks_menu_keyboard, history_task_keyboard, \
-    del_task_from_history
+    del_task_from_history, not_delete_task_keyboard
+from bot_apps.bot_parts.personal_tasks.personal_task_middlewares import ActiveTask
 from bot_apps.bot_parts.personal_tasks.personal_task_text import personal_tasks_menu_text, active_tasks_menu_text, \
     active_task_text, increased_executions_text, not_balance_for_increased_executions, add_new_executions_text, \
     prefix_not_enter_number, prefix_not_correct_number, insufficient_balance_for_executions, task_executions_updated, \
@@ -87,7 +88,7 @@ async def increased_executions_on_task(callback: CallbackQuery, state: FSMContex
 
 
 # Пользователь указал кол-во дополнительных выполнений через кнопку
-@router.callback_query(F.data.startswith('add_new_executions_'))
+@router.callback_query(F.data.startswith('add_new_executions_'), ActiveTask())
 async def add_new_executions_via_button(callback: CallbackQuery, state: FSMContext):
     task_id = await get_task_id(state)
     add_executions = int(callback.data[19:])
@@ -98,7 +99,7 @@ async def add_new_executions_via_button(callback: CallbackQuery, state: FSMConte
 
 
 # Пользователь указал кол-во дополнительных выполнений в виде сообщения
-@router.message(StateFilter(FSMPersonalTask.add_executions))
+@router.message(StateFilter(FSMPersonalTask.add_executions), ActiveTask())
 async def add_new_executions_via_message(message: Message, state: FSMContext):
     await message.delete()
     task_id = await get_task_id(state)
@@ -135,7 +136,7 @@ async def add_new_executions(tg_id: int, task_id: int, add_executions: int):
 
 
 # Обновление кол-ва выполнений
-@router.callback_query(F.data.startswith('update_executions_'))
+@router.callback_query(F.data.startswith('update_executions_'), ActiveTask())
 async def update_executions_active_task(callback: CallbackQuery, state: FSMContext):
     task_id = await get_task_id(state)
     executions = int(callback.data[18:])
@@ -154,7 +155,10 @@ async def update_executions_active_task(callback: CallbackQuery, state: FSMConte
 @router.callback_query((F.data == 'delete_task') | (F.data == 'continue_delete_task'))
 async def delete_active_task(callback: CallbackQuery, state: FSMContext):
     task_id = await get_task_id(state)
-    if callback.data == 'delete_task' and await db.check_quantity_delete_task(callback.from_user.id, task_id):
+    if await db.check_unfinished_task(task_id):  # Проверка на то, что задание всё ещё активно
+        await callback.message.edit_text(text=personal_task['not_delete_task'],
+                                         reply_markup=not_delete_task_keyboard())
+    elif callback.data == 'delete_task' and await db.check_quantity_delete_task(callback.from_user.id, task_id):
         await callback.message.edit_text(personal_task['warnings']['delete_task_warning_4'],
                                          reply_markup=await warning_before_deletion_keyboard())
     else:
@@ -163,7 +167,7 @@ async def delete_active_task(callback: CallbackQuery, state: FSMContext):
 
 
 # Окончательное удаление задания
-@router.callback_query((F.data == 'delete_active_task_button'))
+@router.callback_query(F.data == 'delete_active_task_button', ActiveTask())
 async def confirmation_delete_active_task(callback: CallbackQuery, state: FSMContext):
     task_id = await get_task_id(state)
     task_info: RemainingTaskBalance = await db.get_remaining_task_balance(task_id)

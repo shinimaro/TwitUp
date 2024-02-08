@@ -5,6 +5,7 @@ from pyppeteer.page import Page
 
 from parsing.elements_storage.elements_dictionary import subscribers_blocks, converter, scripts, other_blocks, \
     post_blocks, profile_blocks
+from parsing.parsing_functions.find_functions import checking_for_empty_block
 
 
 # Декоратор для повторной загрузки страницы, если она слишком долго загружалась
@@ -26,7 +27,7 @@ class PageInteraction:
         self.dop_timeout = 3000
 
     # @handle_timeout_error
-    async def open_first_users(self) -> str:
+    async def open_first_users(self) -> str | bool:
         timeout = self.timeout
         try:
             if not self.page.isClosed():
@@ -38,11 +39,14 @@ class PageInteraction:
                     html = await self.page.content()
                 return html
         except TimeoutError:
+            html = await self.page.content()
+            if checking_for_empty_block(html):
+                return False
             timeout += self.dop_timeout
             await self.open_first_users()
 
     # @handle_timeout_error
-    async def open_first_posts(self) -> str:
+    async def open_first_posts(self) -> str | bool:
         timeout = self.timeout
         try:
             if not self.page.isClosed():
@@ -54,6 +58,9 @@ class PageInteraction:
                     html = await self.page.content()
                 return html
         except TimeoutError:
+            html = await self.page.content()
+            if checking_for_empty_block(html):
+                return False
             timeout += self.dop_timeout
             await self.open_first_posts()
 

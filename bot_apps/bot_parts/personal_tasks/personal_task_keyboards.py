@@ -132,6 +132,15 @@ def noneactive_task_keyboard() -> IM:
     return noneactive_task_kb.as_markup()
 
 
+def not_delete_task_keyboard() -> IM:
+    keyboard = BD()
+    keyboard.row(
+        IB(text=BACK,
+           callback_data='back_to_active_tasks'),
+        _get_back_to_main_menu_button(), width=1)
+    return keyboard.as_markup()
+
+
 async def increased_executions_keyboard(tg_id: int, task_id: int) -> IM:
     """Клавиатура под выбором дополнительного кол-ва выполнений"""
     increased_executions_kb = BD()

@@ -1,6 +1,5 @@
 import asyncio
 import math
-import random
 from asyncio import sleep, gather
 from typing import NoReturn
 
@@ -14,7 +13,6 @@ from config import load_config
 from databases.database import Database
 from databases.dataclasses_storage import AuthorTaskInfo
 from parsing.main_checkings.re_checking_executions.start_re_checking import StartReChecking
-from parsing.manage_webdrivers.master_function import Master
 from parsing.other_parsing.check_author_links import check_author_links, CheckAuthorLinks
 
 config = load_config()
@@ -36,7 +34,6 @@ class ReCheckExecution:
         """Строж, находящий задания, выполнение которых необходимо перепроверить"""
         await self._checking_all_authors_tasks()
         await self._checking_executions_tasks()
-        # Функция для обновления времени последней перепроверки
 
     async def _checking_all_authors_tasks(self) -> None:
         """Проверка всех тасков авторов на жизнь"""
@@ -58,10 +55,6 @@ class ReCheckExecution:
         # Удаление элементов после завершения итерации
         self.authors_tasks_list = self.authors_tasks_list[self._get_max_webdrivers():]
 
-    async def _update_last_check_on_author_tasks(self) -> None:
-        """Обновить время последней перепроверки на тасках"""
-        await db.update_check_author_links_time([task.task_id for task in self.tasks_ids_list])
-
     @staticmethod
     async def _check_author_task_on_life(task_info: AuthorTaskInfo) -> None:
         """Проверка ссылок, указанные в задании на жизнь"""
@@ -81,6 +74,7 @@ class ReCheckExecution:
         while self.all_tasks_dict:
             self._select_tasks_messages()
             await gather(*self.tasks)
+            await self._update_last_check_workers_executions()
             self.check_queue.clear()
 
     def _select_tasks_messages(self):
@@ -112,6 +106,14 @@ class ReCheckExecution:
     def _get_max_webdrivers() -> int:
         """Дать максимальное число вебдрайверов, доступное для перепроверки задания"""
         return math.ceil(config.webdrivers.num_webdrivers * 0.5)
+
+    async def _update_last_check_on_author_tasks(self) -> None:
+        """Обновить время последней перепроверки линков авторов на жизнь"""
+        await db.update_check_author_links_time([task.task_id for task in self.tasks_ids_list])
+
+    async def _update_last_check_workers_executions(self) -> None:
+        """Обновить время последней перепроверки выполнения заданий"""
+        await db.update_check_worksers_executions([task_id for task_id in self.check_queue])
 
     async def _re_check_of_execution_main(self, tasks_msg_id: int, task_stage: int) -> None:
         """Основная функция для перепроверки выполнения задания"""
@@ -150,12 +152,12 @@ class ReCheckExecution:
 
     async def re_check_checker(self) -> NoReturn:
         """Функция, вызывающая перепроверку заданий"""
-        standart_sleep = 5 * 60
+        standart_sleep = 10 * 60
+        await sleep(standart_sleep)
         while True:
             task = asyncio.get_event_loop().create_task(self.start_re_check_of_execution())
             await sleep(standart_sleep)
             while not task.done():
                 await send_notification_to_admin(
                     notifications_to_admin['have_not_webdriwers'].format(len(self.all_tasks_dict)))
-                await sleep(standart_sleep if not self.check_queue
-                            else len(self.check_queue) * 5)
+                await sleep(standart_sleep if not self.check_queue else len(self.check_queue) * 10)

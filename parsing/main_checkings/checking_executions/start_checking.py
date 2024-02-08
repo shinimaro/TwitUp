@@ -6,6 +6,7 @@ from typing import Callable, Optional
 from databases.database import Database
 from parsing.elements_storage.elements_dictionary import base_links
 from parsing.main_checkings.base_start_checking import BaseStartChecking, ActionsDict
+from parsing.main_checkings.checking_exceptions import SubscriptionFailed, LikeFailed, RetweetFailed, CommentFailed
 from parsing.main_checkings.checking_executions.main_parsing_functions import CheckExecution
 
 db = Database()
@@ -32,16 +33,15 @@ class StartChecking(BaseStartChecking):
         self._full_out_tasks_list()
         try:
             async with asyncio.timeout(35):
-                await gather(*self.tasks)
-                self._return_driver()
-                return self.actions_dict
+                try:
+                    await gather(*self.tasks)
+                except (SubscriptionFailed, LikeFailed, RetweetFailed, CommentFailed) as ex:
+                    self._handle_checking_exceptions(ex)
+            self._return_driver()
         except asyncio.TimeoutError:
-            self.closed_all_tasks()
-            if self._check_failure():
-                self._apply_default_completion_to_all()
-            else:
-                self._set_failure_check()
+            self._handle_failure()
             self._return_broke_driver()
+        finally:
             return self.actions_dict
 
     async def _set_check_executions(self) -> None:
@@ -57,7 +57,7 @@ class StartChecking(BaseStartChecking):
         base_link_to_worker = f'{base_links["home_page"]}{worker_username}'
         self.parsing_args = ParsingArgs(
             parsing_args={
-                'subscriptions': (self.tasks_msg_id, f'{base_link_to_worker}/following', links_on_actions.account_link),
+                'subscriptions': (self.tasks_msg_id, f'{base_link_to_worker}/following', f'{links_on_actions.account_link}/followers'),
                 'likes': (f'{base_link_to_worker}/likes', f"{links_on_actions.post_link}/likes"),
                 'retweets': (f'{base_link_to_worker}/with_replies', f"{links_on_actions.post_link}/retweets"),
                 'comments': (f'{base_link_to_worker}/with_replies',)},
@@ -72,10 +72,14 @@ class StartChecking(BaseStartChecking):
             page = self.page_list.pop(0)
             self.tasks.extend([self.parsing_args.functions_dict[action](page, *self.parsing_args.parsing_args[action])])
 
-    def _set_failure_check(self):
-        """Установка того, что проверка не удалась"""
-        self.actions_dict = None
+    def _handle_failure(self) -> bool:
+        """Проверить, где застрял бот и пометить это, как ошибку"""
+        self.actions_dict = {key: True if value is not None else False for key, value in self.actions_dict.items()}
 
-    def _apply_default_completion_to_all(self):
-        """Заочно проставляем выполнение всем остальным действиям, чтобы дальнейшая проверка на них не отвлекалась"""
-        self.actions_dict = {key: True if value is None else value for key, value in self.actions_dict.items()}
+    def _handle_checking_exceptions(self, exception: Exception):
+        """Оставить в словаре только ошибку, все остальные действия засчитать"""
+        exceptions_dict = {'SubscriptionFailed': 'subscriptions',
+                           'LikeFailed': 'likes',
+                           'RetweetFailed': 'retweets',
+                           'CommentFailed': 'comments'}
+        self.actions_dict = {key: True if key != exceptions_dict[type(exception).__name__] else False for key in self.actions_dict}
