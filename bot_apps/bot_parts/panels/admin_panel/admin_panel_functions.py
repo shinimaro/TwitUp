@@ -19,7 +19,7 @@ from databases.dataclasses_storage import TaskStatus, UsersList, UserAccount, Us
 db = Database()
 
 
-@dataclass
+@dataclass()
 class SortedUsers:
     key: str
     reverse: bool
@@ -27,7 +27,7 @@ class SortedUsers:
     time: str
 
 
-@dataclass
+@dataclass()
 class SortedTasks:
     key: str
     reverse: bool

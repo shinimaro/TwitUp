@@ -1,3 +1,6 @@
+import json
+from dataclasses import asdict
+
 from aiogram import Router, Bot, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext

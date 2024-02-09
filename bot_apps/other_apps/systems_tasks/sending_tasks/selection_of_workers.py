@@ -20,7 +20,7 @@ class WorkersDict(TypedDict):
     available_accounts: int
 
 
-@dataclass
+@dataclass()
 class SelectionCoefficients:
     count_workers: int
     min_count_accounts: int

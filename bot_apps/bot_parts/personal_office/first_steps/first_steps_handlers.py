@@ -56,8 +56,10 @@ async def add_first_account(callback: CallbackQuery):
 @router.callback_query((F.data == 'specify_account') | (F.data == 'change_first_account'))
 async def adding_an_account(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
-    message_id = await callback.message.answer_photo(photo='https://disk.yandex.ru/i/97G2fkTFxPYZKw', caption=accounts['education_2'],
-                                                     reply_markup=add_first_account_builder())
+    # message_id = await callback.message.answer_photo(photo='https://disk.yandex.ru/i/97G2fkTFxPYZKw', caption=accounts['education_2'],
+    #                                                  reply_markup=add_first_account_builder())
+    message_id = await callback.message.answer(text=accounts['education_2'],
+                                               reply_markup=add_first_account_builder())
     await db.update_main_interface(callback.from_user.id, message_id.message_id)
     await state.set_state(FSMAccounts.add_first_account)
 
@@ -69,9 +71,11 @@ async def input_first_account(message: Message, state: FSMContext):
     await bot.delete_message(message_id=await db.get_main_interface(message.from_user.id), chat_id=message.chat.id)
     # Если вернулся текст с ошибкой
     if isinstance(is_correct, str):
-        message_id = await message.answer_photo(photo='https://disk.yandex.ru/i/97G2fkTFxPYZKw',
-                                                caption=is_correct.format(message.text.strip()[:70]),
-                                                reply_markup=add_first_account_builder())
+        # message_id = await message.answer_photo(photo='https://disk.yandex.ru/i/97G2fkTFxPYZKw',
+        #                                         caption=is_correct.format(message.text.strip()[:70]),
+        #                                         reply_markup=add_first_account_builder())
+        message_id = await message.answer(text=is_correct.format(message.text.strip()[:70]),
+                                          reply_markup=add_first_account_builder())
         await db.update_main_interface(message.from_user.id, message_id.message_id)
     # Если пользователь корректно указал аккаунт
     else:
@@ -87,11 +91,12 @@ async def input_first_account(message: Message, state: FSMContext):
 
 # Провекрка аккаунта пользователя
 @router.callback_query(F.data == 'check_first_task')
-async def process_check_first_task(callback: CallbackQuery, state: FSMContext):
+async def process_check_first_task(callback: CallbackQuery, state: FSMContext, all_users: list[int] = None):
     account = (await state.get_data())['account']
-    await callback.message.edit_text(accounts['examination'].format(account))
-    await sleep(random.uniform(1, 3))
-    all_users = await all_our_users.get_all_our_users()
+    if all_users is None:
+        await callback.message.edit_text(accounts['examination'].format(account))
+        await sleep(random.uniform(1, 3))
+        all_users = await all_our_users.get_all_our_users()
     if account.lower() not in all_users:
         await callback.message.edit_text(accounts['fail_check'].format(account[1:]),
                                          reply_markup=not_add_first_account_builder(),
@@ -131,7 +136,7 @@ async def process_fail_check(callback: CallbackQuery, state: FSMContext):
             disable_web_page_preview=True)
     # Если аккаунты был найден в подписках
     else:
-        await process_check_first_task(callback, state)
+        await process_check_first_task(callback, state, all_users)
 
 
 # Переход обратно в меню с информацией о добавлении первого аккаунта

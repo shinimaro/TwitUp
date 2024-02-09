@@ -34,14 +34,14 @@ class CheckExecution:
     def __init__(self,
                  action_dict: ActionsDict,
                  worker_username: str,
-                 post: str):
+                 post: str | None):
         self.action_dict = action_dict
         self.worker_username = worker_username
         self.post = post
 
     async def parsing_subscriptions(self, page: Page, tasks_msg_id: int, link_to_worker: str, link_to_author: str) -> None:
         """Проверка подписки"""
-        author_username = '@' + link_to_author[20:]
+        author_username = '@' + link_to_author[20:-10].lower()
         subs_list: list[str] | bool = await parsing_user_subscriptions(page, author_username, link_to_worker)
         if subs_list:
             await db.save_worker_cut(tasks_msg_id, *self._get_cut_users(subs_list, author_username))

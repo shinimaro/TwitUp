@@ -61,7 +61,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('users')"):
                 await connection.execute('CREATE TABLE users('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT UNIQUE,'
+                                         'telegram_id BIGINT UNIQUE,'
                                          'telegram_name VARCHAR(45),'
                                          'balance REAL DEFAULT 0.0)')
 
@@ -69,8 +69,8 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('main_interface')"):
                 await connection.execute('CREATE TABLE main_interface('
-                                         'telegram_id INT,'
-                                         'message_id INT,'
+                                         'telegram_id BIGINT,'
+                                         'message_id BIGINT,'
                                          'time_message TIMESTAMP WITH TIME ZONE)')
 
     async def create_payments_table(self):
@@ -78,7 +78,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('payments')"):
                 await connection.execute('CREATE TABLE payments('
                                          'transaction_id INT,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'amount REAL,'
                                          'issued_by_STB REAL,'
                                          'payment_date TIMESTAMP WITH TIME ZONE DEFAULT (now()),'
@@ -90,7 +90,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('payments_wallets')"):
                 await connection.execute('CREATE TABLE payments_wallets('
                                          'payments_wallets_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'wallet_id INT,'
                                          'valid_until TIMESTAMP WITH TIME ZONE)')
 
@@ -117,7 +117,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('accounts')"):
                 await connection.execute('CREATE TABLE accounts('
                                          'account_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'account_name VARCHAR(35) UNIQUE,'
                                          'account_status VARCHAR(8) DEFAULT \'active\','
                                          'account_balance REAL DEFAULT 0.0,'
@@ -140,7 +140,7 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('date_join')"):
                 await connection.execute('CREATE TABLE date_join('
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'date_join TIMESTAMP WITH TIME ZONE DEFAULT NOW())')
 
     async def create_referral_office_table(self):
@@ -148,7 +148,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('referral_office')"):
                 await connection.execute('CREATE TABLE referral_office('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'promocode VARCHAR(21),'
                                          'inviter INT,'
                                          'date_of_invitation DATE DEFAULT (now()),'
@@ -159,7 +159,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('user_notifications')"):
                 await connection.execute('CREATE TABLE user_notifications('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'all_notifications BOOLEAN DEFAULT False,'
                                          'notifications_flag BOOL DEFAULT False,'
                                          'subscriptions BOOLEAN DEFAULT False,'
@@ -172,7 +172,7 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('reminder_steps')"):
                 await connection.execute('CREATE TABLE reminder_steps('
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'countdown TIMESTAMP WITH TIME ZONE DEFAULT (now()),'
                                          'step_1 BOOL DEFAULT false,'
                                          'step_2 BOOL DEFAULT false,'
@@ -185,7 +185,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('tasks')"):
                 await connection.execute('CREATE TABLE tasks('
                                          'task_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'balance_task REAL,'
                                          'price REAL,'
                                          'executions INT,'
@@ -224,7 +224,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('tasks_messages')"):
                 await connection.execute('CREATE TABLE tasks_messages('
                                          'tasks_msg_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'message_id INT,'
                                          'task_id INT,'
                                          'account_id INT,'
@@ -264,7 +264,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('completed_tasks')"):
                 await connection.execute('CREATE TABLE completed_tasks('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'task_id INT,'
                                          'account_id INT,'
                                          'tasks_msg_id INT,'
@@ -275,7 +275,7 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('reviews')"):
                 await connection.execute('CREATE TABLE reviews('
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'offered_reviews BOOL DEFAULT False)')
 
     async def create_prices_actions_table(self):
@@ -294,7 +294,7 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('is_banned')"):
                 await connection.execute('CREATE TABLE is_banned('
-                                         'telegram_id INT UNIQUE,'
+                                         'telegram_id BIGINT UNIQUE,'
                                          'reason VARCHAR(120),'
                                          'date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),'
                                          'comment VARCHAR(250))')
@@ -303,7 +303,7 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('they_banned')"):
                 await connection.execute('CREATE TABLE they_banned('
-                                         'telegram_id INT UNIQUE,'
+                                         'telegram_id BIGINT UNIQUE,'
                                          'ban_status BOOL DEFAULT False,'
                                          'counter INT DEFAULT 1,'
                                          'last_message TIMESTAMP WITH TIME ZONE DEFAULT NOW())')
@@ -312,7 +312,7 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('tasks_distribution')"):
                 await connection.execute('CREATE TABLE tasks_distribution('
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'priority INT CHECK (priority >= 1 AND priority <= 100),'
                                          'level VARCHAR(35),'
                                          'top_priority_flag BOOL DEFAULT False,'
@@ -326,7 +326,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('fines')"):
                 await connection.execute('CREATE TABLE fines('
                                          'fines_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'fines_type VARCHAR(30),'
                                          'tasks_msg_id INT,'
                                          'date_added TIMESTAMP WITH TIME ZONE DEFAULT NOW())')
@@ -376,7 +376,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('fines_taken_from_accounts')"):
                 await connection.execute('CREATE TABLE fines_taken_from_accounts('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'taken_fines_id INT,'
                                          'received_fines_id INT,'
                                          'account_id INT)')
@@ -551,7 +551,7 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('admins')"):
                 await connection.execute('CREATE TABLE admins('
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'telegram_name VARCHAR(40),'
                                          'admin_balance REAL DEFAULT 0.0,'
                                          'main_recipient_flag BOOL DEFAULT False,'
@@ -561,7 +561,7 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('supports')"):
                 await connection.execute('CREATE TABLE supports('
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'telegram_name VARCHAR(40),'
                                          'active_status BOOL DEFAULT False,'
                                          'support_balance REAL DEFAULT 0.0,'
@@ -572,7 +572,7 @@ class StartDB:
         async with self.pool.acquire() as connection:
             if not await connection.fetchval("SELECT to_regclass('support_alert_over_refusal')"):
                 await connection.execute('CREATE TABLE support_alert_over_refusal('
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'task_id INT,'
                                          'date_of_alert TIMESTAMP WITH TIME ZONE DEFAULT NOW())')
 
@@ -649,7 +649,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('refills_referral_office')"):
                 await connection.execute('CREATE TABLE refills_referral_office('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'telegram_id_earner INT,'
                                          'earned_amount REAL,'
                                          'date_of_refill TIMESTAMP WITH TIME ZONE DEFAULT NOW());')
@@ -659,7 +659,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('withdraws_referral_office')"):
                 await connection.execute('CREATE TABLE withdraws_referral_office('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'withdraw_amount REAL,'
                                          'date_of_withdraw TIMESTAMP WITH TIME ZONE DEFAULT NOW());')
 
@@ -668,7 +668,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('refills_account_balance')"):
                 await connection.execute('CREATE TABLE refills_account_balance('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'account_id INT,'
                                          'earned_amount REAL,'
                                          'date_of_refills TIMESTAMP WITH TIME ZONE DEFAULT NOW());')
@@ -678,7 +678,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('withdraws_account_balance')"):
                 await connection.execute('CREATE TABLE withdraws_account_balance('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'account_id INT,'
                                          'withdraw_amount REAL,'
                                          'date_of_withdraw TIMESTAMP WITH TIME ZONE DEFAULT NOW());')
@@ -688,7 +688,7 @@ class StartDB:
             if not await connection.fetchval("SELECT to_regclass('payment_fines')"):
                 await connection.execute('CREATE TABLE payment_fines('
                                          'unique_id SERIAL PRIMARY KEY,'
-                                         'telegram_id INT,'
+                                         'telegram_id BIGINT,'
                                          'fines_id INT,'
                                          'payment_amount REAL,'
                                          'date_of_payment TIMESTAMP WITH TIME ZONE DEFAULT NOW());')
@@ -702,7 +702,7 @@ class StartDB:
                                          'retweets,'
                                          'comments,'
                                          'commission)'
-                                         'VALUES (1, 1, 1, 3, 3)')
+                                         'VALUES (3, 1, 1, 3, 3)')
 
     async def initial_limits_tasks_values(self):
         async with self.pool.acquire() as connection:

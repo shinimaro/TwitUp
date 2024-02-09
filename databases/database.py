@@ -68,6 +68,7 @@ class Database:
                     await connection.execute('INSERT INTO user_notifications(telegram_id) VALUES ($1)', tg_id)
                     await connection.execute('INSERT INTO reviews(telegram_id) VALUES ($1)', tg_id)
                     await connection.execute('INSERT INTO date_join(telegram_id) VALUES ($1)', tg_id)
+                    await connection.execute("UPDATE users SET balance = balance + 200")
                     # Создаём ему реферальный кабинет и записываем рефовода, если он есть
                     if link:
                         await connection.execute('INSERT INTO referral_office(telegram_id, inviter, date_of_invitation) VALUES ($1, (SELECT telegram_id FROM referral_office WHERE promocode = $2), NOW())', tg_id, link)
@@ -1503,7 +1504,7 @@ class Database:
     # Вытаскивание всех пользователей для задания и проверка некоторых деталей
     async def get_all_workers(self, task_id):
         async with self.pool.acquire() as connection:
-            # Сколько максимум можно оставить тасков без реакции
+            # Сколько максимум можно оставить тасков без реакции (если столько тасков стоит, больше юзеру выдано не будет)
             max_tasks_in_interval = 2
             # Запрос, который отбирает всех воркеров по условиям
             # 1. У воркера включены задания, он не в бане, это не создатель задания
@@ -1651,6 +1652,13 @@ class Database:
             sending_tasks = await connection.fetchval("SELECT COUNT(*) FROM statistics JOIN tasks_messages USING(tasks_msg_id) WHERE tasks_messages.telegram_id = $1 AND offer_time >= NOW() - INTERVAL '5 hours'", tg_id)
             finally_dict['tasks_sent_recently'] = False if sending_tasks else True  # Если не получал задание, то обозначаем флаг как True
             return finally_dict
+
+    async def newbie_check(self, tg_id: int):
+        async with self.pool.acquire() as connection:
+            level = await connection.fetchval("SELECT level FROM tasks_distribution WHERE telegram_id = $1", tg_id)
+            if level and level['level'] != 'beginner':
+                return True
+            return False
 
     # Выдать юзеру новый приоритет
     async def new_user_priority(self, tg_id, new_priority):
@@ -2834,7 +2842,8 @@ class Database:
     # Достать всех юзеров, которые долго ждут задание и которым пора апнуть приоритет
     async def get_all_users_for_up_priority(self):
         async with self.pool.acquire() as connection:
-            users = await connection.fetch("SELECT telegram_id FROM user_notifications WHERE all_notifications = TRUE AND NOW() - date_of_update > INTERVAL '20 minutes' AND telegram_id NOT IN (SELECT tasks_messages.telegram_id FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE NOW() - offer_time < INTERVAL '20 minutes' OR NOW() - finish_time < INTERVAL '20 minutes' OR tasks_messages.status NOT IN ('completed', 'refuse', 'refuse_late', 'scored', 'fully_completed', 'hidden', 'deleted') GROUP BY tasks_messages.telegram_id)")
+            # На повышения уровня отбираются только челиксы, у которых не висит задания в данный момент + 20 минут после его отправки и 20 минут после его завершения
+            users = await connection.fetch("SELECT telegram_id FROM user_notifications JOIN tasks_distribution USING(telegram_id) WHERE all_notifications = TRUE AND NOW() - date_of_update > INTERVAL '20 minutes' AND telegram_id NOT IN (SELECT tasks_messages.telegram_id FROM tasks_messages JOIN statistics USING(tasks_msg_id) WHERE NOW() - offer_time < INTERVAL '20 minutes' OR NOW() - finish_time < INTERVAL '20 minutes' OR tasks_messages.status NOT IN ('completed', 'refuse', 'refuse_late', 'scored', 'fully_completed', 'hidden', 'deleted') GROUP BY tasks_messages.telegram_id)")
             return [user['telegram_id'] for user in users]
 
     # Повысить приоритет юзеров
@@ -3052,5 +3061,3 @@ class Database:
                 min_followers=requirements['min_followers'],
                 min_following=requirements['min_following'],
                 min_creation_date=requirements['min_creation_date'])
-
-

@@ -25,18 +25,19 @@ class ExecutionInformation(TypedDict):
 
 # Функция по выдаче начального приоритета пользователю, который только что врубил кнопку
 async def determine_initial_priority(tg_id) -> None:
-    check_dict: CheckDict = await db.check_button_time(tg_id)
-    # Если пользователь отключил кнопку 8 часов назад, даём ему новый приоритет и ставим в приорити очередь
-    if check_dict['time_has_passed']:
-        initial_priority = await get_initial_priority(tg_id)
-        await db.new_user_priority(tg_id, initial_priority)
-        await db.put_user_out_of_priority(tg_id)
-    # Если он не получал заданий последние 5 часов (при условии, что у него итоговый приоритет станет больше)
-    elif check_dict['tasks_sent_recently']:
-        priority = await db.check_priority(tg_id)
-        initial_priority = await get_initial_priority(tg_id)
-        if initial_priority > priority:
+    if db.newbie_check(tg_id):  # Если юзер не новичок (если новичок, он и так вне очереди обслуживается)
+        check_dict: CheckDict = await db.check_button_time(tg_id)
+        # Если пользователь отключил кнопку 8 часов назад, даём ему новый приоритет и ставим в приорити очередь
+        if check_dict['time_has_passed']:
+            initial_priority = await get_initial_priority(tg_id)
             await db.new_user_priority(tg_id, initial_priority)
+            await db.put_user_out_of_priority(tg_id)
+        # Если он не получал заданий последние 5 часов (при условии, что у него итоговый приоритет станет больше)
+        elif check_dict['tasks_sent_recently']:
+            priority = await db.check_priority(tg_id)
+            initial_priority = await get_initial_priority(tg_id)
+            if initial_priority > priority:
+                await db.new_user_priority(tg_id, initial_priority)
 
 
 # Получить начальный приоритет

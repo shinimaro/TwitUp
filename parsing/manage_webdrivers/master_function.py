@@ -3,10 +3,12 @@ import os
 import pickle
 import re
 from asyncio import gather
+from asyncio import sleep
 from typing import TypedDict
 
 import aiofiles
 import pyppeteer.errors
+from aiogram import Bot
 from pyppeteer.browser import Browser
 from pyppeteer.page import Page
 
@@ -17,6 +19,7 @@ from parsing.elements_storage.elements_dictionary import other_blocks, converter
 from parsing.manage_webdrivers.start_webdriver.webdriver import Webdrivers
 
 config = load_config()
+bot = Bot(token=config.tg_bot.token)
 
 
 class WatchmanWebdriver(TypedDict):
@@ -26,6 +29,7 @@ class WatchmanWebdriver(TypedDict):
 
 class Master:
     usable_drivers_queue = asyncio.Queue(maxsize=config.webdrivers.num_webdrivers)
+    driver_counter = 0
     watchman_webdriver: WatchmanWebdriver = {'page': None, 'driver': None}
 
     # Генерация всех базовых вебдрайверов
@@ -35,7 +39,10 @@ class Master:
             tasks = [self._generate() for _ in range(min(config.webdrivers.webdrivers_at_once,
                                                          config.webdrivers.num_webdrivers - self.usable_drivers_queue.qsize()))]
             await gather(*tasks)
+
+            # await bot.send_message(chat_id=1338827549, text=f'Вебдрайверов готово: {self.usable_drivers_queue.qsize()}. Осталось сгенерировать вебдрайверов: {config.webdrivers.num_webdrivers - self.usable_drivers_queue.qsize()}')
             print(f'Вебдрайверов готово: {self.usable_drivers_queue.qsize()}. Осталось сгенерировать вебдрайверов: {config.webdrivers.num_webdrivers - self.usable_drivers_queue.qsize()}')
+        self.change_driver_couter(self.usable_drivers_queue.qsize())
 
     # Генерация нового вебдрайвера для добавления его в очередь
     async def _generate(self) -> None:
@@ -67,9 +74,9 @@ class Master:
         await page.goto(base_links['followers_page'])
 
     # Закрытие вебдрайвера через закрытие всех его страниц
-    @staticmethod
-    async def close_driver(driver: Browser) -> None:
+    async def close_driver(self, driver: Browser) -> None:
         await asyncio.gather(*[page.close() for page in await driver.pages()])
+        self.change_driver_couter(-1)
 
     # Закрытие всех лишних страниц в вебдрайвере
     @staticmethod
@@ -84,11 +91,19 @@ class Master:
             return await self.usable_drivers_queue.get()
         # Если нет, создаём новый
         else:
+            await self.waiting_before_adding()
+            self.change_driver_couter(1)
             webdrivers = Webdrivers()
             driver = None
             while not driver:
                 driver = await webdrivers.webdriver()
             return driver
+
+    # Ожидание перед созданием дополнительного вебдрайвера
+    @classmethod
+    async def waiting_before_adding(cls):
+        while cls.driver_counter >= config.webdrivers.max_webdrivers:
+            await sleep(2)
 
     # Вернуть драйвер
     async def give_driver(self, driver: Browser) -> None:
@@ -100,6 +115,10 @@ class Master:
         else:
             await self.close_driver(driver)
 
+    @classmethod
+    def change_driver_couter(cls, num: int) -> None:
+        cls.driver_counter += num
+
     # Функция, в которую будут складывать не рабочие вебдрайверы (должна заменять вебдрайвер, проверять его на работоспособность и, если что-то с аккаунтом, то удалять такой файл и сообщать об этом (наверное изменять название файла на брокен + логин аккаунта)
     async def give_broke_driver(self, driver: Browser) -> None:
         await self.close_pages(driver)
@@ -108,6 +127,7 @@ class Master:
         if not await self.check_driver(page):
             # Берём куки и закрываем драйвер
             cookies = (await page.cookies())[0]
+            await self.close_driver(driver)
             # Находим папку с куками всех аккаунтов
             current_file_dir = os.path.dirname(__file__)
             file_path = os.path.join(current_file_dir, '.', 'cookies/')
@@ -148,19 +168,10 @@ class Master:
     @staticmethod
     async def check_driver(page: Page) -> bool:
         try:
-            await page.goto(base_links['home_page'], timeout=30000)
-            await page.waitForSelector(converter(other_blocks['publish_button']), timeout=3000)
+            await page.goto(base_links['home_page'], timeout=15000)
+            await page.waitForSelector(converter(other_blocks['publish_button']), timeout=15000)
             await page.goto('about:blank')
             return True
         except pyppeteer.errors.TimeoutError:
             return False
-
-
-if __name__ == '__main__':
-    async def sus():
-        master = Master()
-        await master.get_driver()
-
-    asyncio.get_event_loop().run_until_complete(sus())
-
 

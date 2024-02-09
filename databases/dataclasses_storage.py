@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
@@ -446,7 +447,7 @@ class GetWalletIdLock:
     wallet_id_lock = asyncio.Lock()
 
 
-@dataclass
+@dataclass()
 class WaitingStartTask:
     waiting_time: int = 60  # Используется в начальном ожидании при старте таска, а также в бд для проверки того, можно ли засчитывать данное задание за удалённое
 
